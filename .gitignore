@@ -1,0 +1,8 @@
+rf-node/build/
+rf-node/sdkconfig
+rf-node/sdkconfig.old
+rf-node/managed_components/
+ap-node/.pio/
+/*.csv
+tools/*.csv
+__pycache__/

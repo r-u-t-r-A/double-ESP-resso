@@ -1,0 +1,57 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Protocol and RSSI scaling tests
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -I common tests/test_c5link_proto.c -o t_proto && ./t_proto
+          cc -std=c99 -Wall -Wextra -Werror -I rf-node/main tests/test_rssi_scale.c -lm -o t_rssi && ./t_rssi
+
+  rf-node:
+    runs-on: ubuntu-latest
+    container: espressif/idf:v6.0.2
+    steps:
+      - uses: actions/checkout@v4
+      - name: idf.py build
+        shell: bash
+        run: |
+          . $IDF_PATH/export.sh
+          cd rf-node && idf.py set-target esp32c5 build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rf-node
+          path: |
+            rf-node/build/rf-node.bin
+            rf-node/build/bootloader/bootloader.bin
+            rf-node/build/partition_table/partition-table.bin
+            rf-node/build/flasher_args.json
+
+  ap-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Build firmware and LittleFS image
+        run: |
+          cd ap-node
+          pio run -e XIAO_C5
+          pio run -e XIAO_C5 -t buildfs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ap-node
+          path: |
+            ap-node/.pio/build/XIAO_C5/firmware.bin
+            ap-node/.pio/build/XIAO_C5/bootloader.bin
+            ap-node/.pio/build/XIAO_C5/partitions.bin
+            ap-node/.pio/build/XIAO_C5/littlefs.bin

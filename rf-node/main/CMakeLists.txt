@@ -1,0 +1,23 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "rf_frontend.c"
+        "iq_power.c"
+        "link.c"
+        "console.c"
+    INCLUDE_DIRS "." "../../common"
+    REQUIRES
+        esp_wifi
+        esp_phy
+        nvs_flash
+        esp_event
+        esp_netif
+        esp_driver_parlio
+        esp_driver_gpio
+        esp_driver_uart
+        esp_driver_usb_serial_jtag
+        esp_timer
+        esp_mm
+        vfs
+        hal
+)
