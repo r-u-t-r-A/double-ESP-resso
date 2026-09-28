@@ -15,6 +15,11 @@ const minLapInput = document.getElementById("minLap");
 const alarmThreshold = document.getElementById("alarmThreshold");
 const rfGainInput = document.getElementById("rfGain");
 const rfStatusDisplay = document.getElementById("rfstatus");
+const ledOnInput = document.getElementById("ledOn");
+const ledCountInput = document.getElementById("ledCount");
+const ledBrightInput = document.getElementById("ledBright");
+const ledBrightSpan = document.getElementById("ledBrightSpan");
+var ledStrip = false;
 
 // double-ESP-resso: the C5 RF node tunes 5180-5885 MHz only.
 var rfNode = false;
@@ -91,6 +96,14 @@ onload = function (e) {
         rfNode = true;
         rfGainInput.value = config.rfGain;
         document.querySelectorAll(".rfnode-only").forEach((el) => (el.style.display = ""));
+      }
+      if (config.ledCount !== undefined) {
+        ledStrip = true;
+        ledOnInput.checked = !!config.ledOn;
+        ledCountInput.value = config.ledCount;
+        ledBrightInput.value = config.ledBright;
+        ledBrightSpan.textContent = config.ledBright;
+        document.querySelectorAll(".ledstrip-only").forEach((el) => (el.style.display = ""));
       }
       populateFreqOutput();
       stopRaceButton.disabled = true;
@@ -274,6 +287,13 @@ function saveConfig() {
       ssid: ssidInput.value,
       pwd: pwdInput.value,
       ...(rfNode ? { rfGain: Math.max(0, Math.min(89, parseInt(rfGainInput.value) || 0)) } : {}),
+      ...(ledStrip
+        ? {
+            ledOn: ledOnInput.checked ? 1 : 0,
+            ledCount: Math.max(0, Math.min(300, parseInt(ledCountInput.value) || 0)),
+            ledBright: Math.max(0, Math.min(255, parseInt(ledBrightInput.value) || 0)),
+          }
+        : {}),
     }),
   })
     .then((response) => response.json())
@@ -471,6 +491,8 @@ function doSpeak(obj) {
 
 async function startRace() {
   startRaceButton.disabled = true;
+  // Gate lights go red for the countdown (ignored by boards without a strip).
+  fetch("/timer/arm", { method: "POST" }).catch(() => {});
   // Calculate time taken to say starting phrase
   const baseWordsPerMinute = 150;
   let baseWordsPerSecond = baseWordsPerMinute / 60;

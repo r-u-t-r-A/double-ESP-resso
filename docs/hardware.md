@@ -71,3 +71,40 @@ One USB-C cable or a battery powers both boards through the 5V link.
 - The XIAO ESP32-C5 battery-sense divider ratio and enable polarity. The
   firmware drives GPIO26 high and assumes a 1:2 divider.
 - Whether the XIAO user LED is active-low. The firmware assumes it is.
+
+## WS2812B gate LED strip (AP node, D4)
+
+The AP node drives a WS2812B strip around the gate on **D4 (GPIO23)**. D4 is not
+joined to the RF node.
+
+```
+5 V supply (+) ──┬───────────────────── strip +5V
+                 └─ 1000 µF ─┐
+5 V supply (−) ──┴───────────┴───────── strip GND ── AP node GND
+AP node D4 ── 330 Ω ─────────────────── strip DIN
+```
+
+- **Power the strip from its own 5 V supply**, for example a buck converter
+  from the flight battery. A XIAO's USB or 5V pin cannot supply it.
+  - Tie the supply ground to the AP node's GND.
+  - Put the capacitor right at the strip input.
+- **Sizing the supply:** a 50 cm diameter gate is about 157 cm around. That is
+  about 94 LEDs at 60/m, or 47 at 30/m. Each LED draws up to 60 mA at full
+  white.
+
+| Case | Current |
+|------|---------|
+| 94 LEDs, full brightness, white | 5.6 A |
+| 94 LEDs, default brightness cap 80/255, white | about 1.8 A |
+| Racing green at the default cap | about 0.5 A |
+
+  Size the supply for the brightness you configure.
+- **Level shifting:** 3.3 V data usually works with a short data wire. If the
+  first LEDs flicker, add a 74AHCT125 level shifter.
+- **Keep it away from the RF node:** route the strip's supply and its wiring
+  away from the RF node. Rerun the desense check (bring-up §3) with the strip lit.
+- **Powering the XIAO stack from the strip supply:** only feed the stack's 5V
+  pin from that supply when no USB cable is plugged in.
+
+The LED count, brightness cap and on/off switch are set in the web UI
+(Configuration tab). The colour meanings are listed in `README.md`.

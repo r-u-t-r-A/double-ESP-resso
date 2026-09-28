@@ -35,10 +35,10 @@ bool C5Link::poll() {
             statusTimeMs = millis();
             statusSeen = true;
         } else if (m.type == C5LINK_MSG_RSSI) {
-            if (haveSeq) dropped += (uint8_t)(m.seq - lastSeq - 1);
+            if (haveSeq) dropped = dropped + (uint8_t)(m.seq - lastSeq - 1);
             haveSeq = true;
             lastSeq = m.seq;
-            ++samples;
+            samples = samples + 1;
             rssi = m.rssi;
             return true;
         }

@@ -107,6 +107,24 @@
             <span class="val" id="rfstatus">-</span>
           </div>
 
+          <div class="config-item ledstrip-only" style="display: none">
+            <label for="ledOn">Gate LED strip:</label>
+            <input type="checkbox" id="ledOn" />
+          </div>
+
+          <div class="config-item ledstrip-only" style="display: none">
+            <label for="ledCount">LED count:</label>
+            <input type="number" min="0" max="300" step="1" id="ledCount" value="60" />
+          </div>
+
+          <div class="config-item ledstrip-only" style="display: none">
+            <label for="ledBright">LED brightness:</label>
+            <div class="input-with-value">
+              <span class="val" id="ledBrightSpan">80</span>
+              <input type="range" min="5" max="255" step="1" id="ledBright" value="80" oninput="ledBrightSpan.textContent = this.value" />
+            </div>
+          </div>
+
           <div class="config-item">
             <label for="bvolt">Battery voltage:</label>
             <span class="val" id="bvolt"></span>

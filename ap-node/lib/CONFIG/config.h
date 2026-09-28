@@ -31,6 +31,7 @@
 #define PIN_C5LINK_RX 11      //D6 <- RF node TX
 #define PIN_C5LINK_TX 12      //D7 -> RF node RX
 #define PIN_BUZZER 8          //D8
+#define PIN_LED_STRIP 23      //D4, WS2812B data (330R series resistor)
 #define BUZZER_INVERTED false
 #define DEFAULT_FREQUENCY 5658 //R1
 #define DEFAULT_RF_GAIN 40
@@ -89,12 +90,15 @@
 #ifndef DEFAULT_RF_GAIN
 #define DEFAULT_RF_GAIN 40
 #endif
+#define DEFAULT_LED_COUNT 60
+#define DEFAULT_LED_BRIGHTNESS 80  // of 255; caps strip current
+#define LED_COUNT_MAX 300
 
 #define EEPROM_RESERVED_SIZE 256
 #define CONFIG_JSON_SIZE 384
 #define CONFIG_MAGIC_MASK (0b11U << 30)
 #define CONFIG_MAGIC (0b01U << 30)
-#define CONFIG_VERSION 1U
+#define CONFIG_VERSION 2U
 
 #define EEPROM_CHECK_TIME_MS 1000
 
@@ -111,6 +115,9 @@ typedef struct {
     char ssid[33];
     char password[33];
     uint8_t rfGain;  // RF node fixed RX gain index (C5VRX_LINK builds)
+    uint8_t ledEnabled;     // WS2812B gate strip (PIN_LED_STRIP builds)
+    uint8_t ledBrightness;
+    uint16_t ledCount;
 } laptimer_config_t;
 
 class Config {
@@ -130,6 +137,9 @@ class Config {
     uint8_t getEnterRssi();
     uint8_t getExitRssi();
     uint8_t getRfGain();
+    bool getLedEnabled();
+    uint16_t getLedCount();
+    uint8_t getLedBrightness();
     char* getSsid();
     char* getPassword();
 

@@ -31,7 +31,18 @@ Nothing below has been done yet. Record the results here (with dates) as they ar
 - [ ] Compare RF node noise-floor and gate-pass RSSI with the AP Wi-Fi idle and with a phone streaming the Calibration tab.
 - [ ] If the AP radio desenses the receiver, lower `C5VRX_AP_TX_POWER` in `ap-node/lib/CONFIG/config.h`.
 
-## 4. Field
+## 4. Gate LED strip
+
+- [ ] Power the strip from its own 5 V supply. The idle state shows breathing blue.
+- [ ] Set the LED count in the web UI. The whole ring lights, with no stale pixels past the end.
+- [ ] Press *Start Race*: the gate pulses red during the countdown and flashes green at the tone.
+- [ ] Carry a VTX through the gate:
+  - [ ] Idle: the meter fills.
+  - [ ] Race running: the ring turns white while inside, and the lap chase plays.
+- [ ] Unplug the RF node: the gate blinks purple within about 3 s.
+- [ ] Repeat the desense check from §3 with the strip lit at the chosen brightness.
+
+## 5. Field
 
 - [ ] Tune the enter/exit thresholds and minimum lap time.
 - [ ] Compare lap times against video frame timing. The target is ±100 ms.

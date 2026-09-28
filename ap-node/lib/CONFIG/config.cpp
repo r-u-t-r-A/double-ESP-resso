@@ -62,6 +62,11 @@ void Config::toJson(AsyncResponseStream& destination) {
 #ifdef C5VRX_LINK
     config["rfGain"] = conf.rfGain;
 #endif
+#ifdef PIN_LED_STRIP
+    config["ledOn"] = conf.ledEnabled;
+    config["ledCount"] = conf.ledCount;
+    config["ledBright"] = conf.ledBrightness;
+#endif
     serializeJson(config, destination);
 }
 
@@ -79,6 +84,11 @@ void Config::toJsonString(char* buf) {
     config["pwd"] = conf.password;
 #ifdef C5VRX_LINK
     config["rfGain"] = conf.rfGain;
+#endif
+#ifdef PIN_LED_STRIP
+    config["ledOn"] = conf.ledEnabled;
+    config["ledCount"] = conf.ledCount;
+    config["ledBright"] = conf.ledBrightness;
 #endif
     serializeJsonPretty(config, buf, CONFIG_JSON_SIZE);
 }
@@ -124,6 +134,27 @@ void Config::fromJson(JsonObject source) {
         strlcpy(conf.password, source["pwd"] | "", sizeof(conf.password));
         modified = true;
     }
+    if (source["ledOn"].is<int>()) {
+        uint8_t on = source["ledOn"] ? 1 : 0;
+        if (on != conf.ledEnabled) {
+            conf.ledEnabled = on;
+            modified = true;
+        }
+    }
+    if (source["ledCount"].is<int>()) {
+        int n = source["ledCount"];
+        if (n >= 0 && n <= LED_COUNT_MAX && n != conf.ledCount) {
+            conf.ledCount = n;
+            modified = true;
+        }
+    }
+    if (source["ledBright"].is<int>()) {
+        int b = source["ledBright"];
+        if (b >= 0 && b <= 255 && b != conf.ledBrightness) {
+            conf.ledBrightness = b;
+            modified = true;
+        }
+    }
     if (source["rfGain"].is<int>()) {
         int gain = source["rfGain"];
         if (gain >= 0 && gain <= 89 && gain != conf.rfGain) {
@@ -157,6 +188,18 @@ uint8_t Config::getRfGain() {
     return conf.rfGain;
 }
 
+bool Config::getLedEnabled() {
+    return conf.ledEnabled != 0;
+}
+
+uint16_t Config::getLedCount() {
+    return conf.ledCount;
+}
+
+uint8_t Config::getLedBrightness() {
+    return conf.ledBrightness;
+}
+
 char* Config::getSsid() {
     return conf.ssid;
 }
@@ -172,6 +215,9 @@ void Config::setDefaults(void) {
     conf.version = CONFIG_VERSION | CONFIG_MAGIC;
     conf.frequency = DEFAULT_FREQUENCY;
     conf.rfGain = DEFAULT_RF_GAIN;
+    conf.ledEnabled = 1;
+    conf.ledCount = DEFAULT_LED_COUNT;
+    conf.ledBrightness = DEFAULT_LED_BRIGHTNESS;
     conf.minLap = 100;
     conf.alarm = 36;
     conf.announcerType = 2;

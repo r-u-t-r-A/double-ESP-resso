@@ -14,6 +14,24 @@ static Buzzer buzzer;
 static Led led;
 static LapTimer timer;
 static BatteryMonitor monitor;
+#ifdef PIN_LED_STRIP
+static LedStrip ledStrip;
+
+static void handleGateLights(uint32_t currentTimeMs) {
+    ledStrip.configure(config.getLedEnabled(), config.getLedCount(), config.getLedBrightness());
+    ledstrip_inputs_t in = {};
+    in.running = timer.isRunning();
+    in.lapSerial = timer.getLapSerial();
+    in.rssi = timer.getRssi();
+    in.enterRssi = config.getEnterRssi();
+    in.exitRssi = config.getExitRssi();
+#ifdef C5VRX_LINK
+    in.rfFault = !rx.healthy(currentTimeMs);
+#endif
+    in.batteryLow = monitor.isAlarming();
+    ledStrip.handleLedStrip(currentTimeMs, in);
+}
+#endif
 
 static TaskHandle_t xTimerTask = NULL;
 
@@ -29,6 +47,9 @@ static void parallelTask(void *pvArgs) {
         rx.handleGainChange(currentTimeMs, config.getRfGain());
 #endif
         monitor.checkBatteryState(currentTimeMs, config.getAlarmThreshold());
+#ifdef PIN_LED_STRIP
+        handleGateLights(currentTimeMs);
+#endif
         buzzer.handleBuzzer(currentTimeMs);
         led.handleLed(currentTimeMs);
 #ifdef C5VRX_LINK
@@ -58,6 +79,10 @@ void setup() {
     ws.init(&config, &timer, &monitor, &buzzer, &led);
 #ifdef C5VRX_LINK
     ws.setRssiSource(&rx);
+#endif
+#ifdef PIN_LED_STRIP
+    ledStrip.init(PIN_LED_STRIP);
+    ws.setLedStrip(&ledStrip);
 #endif
     led.on(400);
     buzzer.beep(200);

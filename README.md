@@ -46,8 +46,11 @@ experimental `phy_set_freq()` step that C5VRX uses.
 ## Hardware
 
 - 2 × Seeed Studio XIAO ESP32-C5.
-- Optional: a buzzer on the AP node's D8, and a 1S battery on the AP node's
-  battery pads.
+- Optional:
+  - A buzzer on the AP node's D8.
+  - A 1S battery on the AP node's battery pads.
+  - A **WS2812B strip around the gate** on the AP node's D4, with its own
+    5 V supply. See [docs/hardware.md](docs/hardware.md#ws2812b-gate-led-strip-ap-node-d4).
 
 **Join only these four pins between the boards:** 5V, GND, D6 and D7. The RF
 node streams its 40–80 MHz IQ bus out on D0–D3 and D10, and D2/D3 are
@@ -125,6 +128,25 @@ For finer calibration without the AP node, plug the RF node in over USB and run:
 tools/rssi_log.py /dev/ttyACM0 --freq 5732 --gain 40 --seconds 60 -o pass.csv
 tools/rssi_log.py --plot pass.csv
 ```
+
+## Gate lights
+
+With a WS2812B strip fitted, the gate shows the race state. States higher in
+the table take priority.
+
+| State | Lights |
+|-------|--------|
+| RF node link down or RF error | Purple blink |
+| Lap recorded | Three white segments chase around the ring (0.6 s) |
+| Race start (tone) | Bright green flash (1 s) |
+| Start countdown ("Arm your quad") | Pulsing red. Times out after 15 s if the start never comes. |
+| Race running | Green. White while the drone is inside the gate (RSSI ≥ Enter). |
+| Idle | Breathing blue, plus an RSSI level meter that fills from *Exit* to *Enter* (useful for calibration) |
+| Low battery | Short amber blip every 2 s, over any state |
+
+The start countdown itself still runs in the browser. *Start Race* posts
+`/timer/arm`, and the gate turns green when the page posts `/timer/start` at
+the tone.
 
 ## How the RF node measures RSSI
 

@@ -3,6 +3,9 @@
 
 #include "battery.h"
 #include "laptimer.h"
+#ifdef PIN_LED_STRIP
+#include "ledstrip.h"
+#endif
 
 #define WIFI_CONNECTION_TIMEOUT_MS 30000
 #define WIFI_RECONNECT_TIMEOUT_MS 500
@@ -14,6 +17,9 @@ class Webserver {
     void handleWebUpdate(uint32_t currentTimeMs);
 #ifdef C5VRX_LINK
     void setRssiSource(RssiSource *source) { rssiSource = source; }
+#endif
+#ifdef PIN_LED_STRIP
+    void setLedStrip(LedStrip *s) { ledStrip = s; }
 #endif
 
    private:
@@ -28,6 +34,9 @@ class Webserver {
     Led *led;
 #ifdef C5VRX_LINK
     RssiSource *rssiSource = nullptr;
+#endif
+#ifdef PIN_LED_STRIP
+    LedStrip *ledStrip = nullptr;
 #endif
 
     wifi_mode_t wifiMode = WIFI_OFF;

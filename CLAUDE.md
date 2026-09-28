@@ -38,6 +38,13 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
 - **RSSI scaling:** mean (2s+1)² power per axis, mapped logarithmically so the
   ~23.5 dB range at one fixed gain becomes 0-255. It is not calibrated dBm.
 
+## Gate LEDs
+
+- WS2812B strip on the AP node's D4 (GPIO23), driven by `lib/LEDSTRIP`
+  (Adafruit NeoPixel over RMT) from `parallelTask`.
+- The gate is 50 cm in diameter, so about 94 LEDs at 60/m.
+- The start countdown lives in the browser, which calls `/timer/arm` so the gate knows about it.
+
 ## Status (2026-09-28)
 
 - Both firmwares build locally and in GitHub Actions, and the host tests pass.
@@ -49,6 +56,7 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
   - The default gain of 40.
   - Desense from the 2.4 GHz AP.
   - XIAO battery sense on GPIO6/26, and whether the LED is active-low.
+  - The gate LED strip (added after the first hardware-free build).
 - The upstream PhobosLT envs (esp32dev, C3, S3) fail to build even on unmodified
   upstream because of library drift. Only `XIAO_C5` is maintained.
 

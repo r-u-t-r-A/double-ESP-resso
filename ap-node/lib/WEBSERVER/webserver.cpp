@@ -307,6 +307,15 @@ Battery Voltage:\t%0.1fv";
         request->send(200, "application/json", "{\"status\": \"OK\"}");
     });
 
+    // Browser start sequence began ("Arm your quad"): gate lights go red
+    // until /timer/start arrives or the arm times out.
+    server.on("/timer/arm", HTTP_POST, [this](AsyncWebServerRequest *request) {
+#ifdef PIN_LED_STRIP
+        if (ledStrip) ledStrip->arm(millis());
+#endif
+        request->send(200, "application/json", "{\"status\": \"OK\"}");
+    });
+
     server.on("/timer/stop", HTTP_POST, [this](AsyncWebServerRequest *request) {
         timer->stop();
         request->send(200, "application/json", "{\"status\": \"OK\"}");

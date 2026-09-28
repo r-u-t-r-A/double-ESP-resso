@@ -28,6 +28,8 @@ class LapTimer {
     uint8_t getRssi();
     uint32_t getLapTime();
     bool isLapAvailable();
+    bool isRunning() { return state == RUNNING; }
+    uint32_t getLapSerial() { return lapSerial; }
 
    private:
     laptimer_state_e state = STOPPED;
@@ -48,6 +50,7 @@ class LapTimer {
     uint32_t rssiPeakTimeMs;
 
     bool lapAvailable = false;
+    volatile uint32_t lapSerial = 0;
 
     void lapPeakCapture();
     bool lapPeakCaptured();

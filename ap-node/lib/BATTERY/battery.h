@@ -18,6 +18,7 @@ class BatteryMonitor {
     void init(uint8_t pin, uint8_t batScale, uint8_t batAdd, Buzzer *buzzer, Led *l);
     uint8_t getBatteryVoltage();
     void checkBatteryState(uint32_t currentTimeMs, uint8_t alarmThreshold);
+    bool isAlarming() { return state != ALARM_OFF; }
 
    private:
     alarm_state_e state = ALARM_OFF;

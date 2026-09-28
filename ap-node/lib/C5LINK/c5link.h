@@ -30,6 +30,10 @@ class C5Link {
     void handleGainChange(uint32_t currentTimeMs, uint8_t gain);
 
     bool linkUp(uint32_t currentTimeMs);
+    // Link up and the RF node measuring (OK or briefly TUNING).
+    bool healthy(uint32_t currentTimeMs) {
+        return linkUp(currentTimeMs) && (rfState == C5LINK_ST_OK || rfState == C5LINK_ST_TUNING);
+    }
     void statusString(char *buf, size_t len, uint32_t currentTimeMs);
 
    private:

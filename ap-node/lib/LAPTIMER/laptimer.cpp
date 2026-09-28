@@ -111,6 +111,7 @@ void LapTimer::finishLap() {
     }
     lapCount = (lapCount + 1) % LAPTIMER_LAP_HISTORY;
     lapAvailable = true;
+    lapSerial = lapSerial + 1;
 }
 
 uint8_t LapTimer::getRssi() {
