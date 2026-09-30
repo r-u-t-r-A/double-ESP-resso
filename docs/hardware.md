@@ -16,20 +16,20 @@ The RF node:
 | Pins | Use |
 |------|-----|
 | D0, D1, D2, D3, D10 and GPIO 3/4/5 (not on the header) | **MODEM_DIAG Q4/I4 outputs**, toggling at 40–80 MHz |
-| D6 (GPIO11) | UART TX to the AP node |
-| D7 (GPIO12) | UART RX from the AP node |
+| D5 (GPIO24) | UART TX to the AP node |
+| D9 (GPIO9) | UART RX from the AP node |
 
 The AP node:
 
 | Pins | Use |
 |------|-----|
-| D6 (GPIO11) | UART RX from the RF node |
-| D7 (GPIO12) | UART TX to the RF node |
+| D5 (GPIO24) | UART RX from the RF node |
+| D9 (GPIO9) | UART TX to the RF node |
 | D8 (GPIO8) | Optional buzzer |
 | GPIO27 | User LED |
 | GPIO6 / GPIO26 | Battery sense ADC / divider enable |
 
-## Stacking rule: join 5V, GND, D6 and D7 only
+## Stacking rule: join 5V, GND, D5 and D9 only
 
 When XIAO boards are stacked, each pin meets the same pin on the other board.
 Joining **all** pins is not safe, for two reasons:
@@ -40,12 +40,17 @@ Joining **all** pins is not safe, for two reasons:
   resets while the RF node is driving them, the AP node can boot in the wrong
   mode.
 
-Fit header pins only at **5V, GND, D6 and D7**, or wire those four pins
+**Do not use D6/D7 for the link.** GPIO11/12 are the ESP32-C5 UART0 console
+pins. Both chips' ROM boot logs, and the AP node's whole Arduino console, are
+driven out on GPIO11. On the first hardware test this fought the RF node's
+transmitter, and every link line arrived garbled.
+
+Fit header pins only at **5V, GND, D5 and D9**, or wire those four pins
 directly. Because the pins meet pin-to-pin, the UART roles cross in firmware:
 
 ```
-RF node D6 (TX) ─────── D6 (RX) AP node
-RF node D7 (RX) ─────── D7 (TX) AP node
+RF node D5 (TX) ─────── D5 (RX) AP node
+RF node D9 (RX) ─────── D9 (TX) AP node
 RF node 5V      ─────── 5V      AP node
 RF node GND     ─────── GND     AP node
 ```

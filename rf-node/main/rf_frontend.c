@@ -18,7 +18,10 @@
 #include "esp_netif.h"
 #include "esp_rom_gpio.h"
 #include "esp_wifi.h"
+#include "heap_memory_layout.h"
 #include "soc/gpio_sig_map.h"
+
+#include "node.h"
 
 #define REG32(a)         (*(volatile uint32_t *)(uintptr_t)(a))
 
@@ -42,6 +45,17 @@
 #define TX_START_SELECT 0x00060000u
 #define SELECTOR_MASK   0x01fe0000u
 #define HP_SRAM_USAGE   0x60095004u
+
+/* The MAC dump engine, armed below in pre-trigger circular mode, keeps
+ * writing its 16384-word capture into HP SRAM at DUMP_SRAM_BASE (the 64 KiB
+ * MAC_DUMP_ALLOC offset; C5VRX's phase-tap probe reads it there). It is a
+ * diagnostic writer we never read, but it overwrites whatever lives there.
+ * Without this reservation the heap (task stacks, USB console state, Wi-Fi
+ * buffers) sat in that window: the node kept measuring but the USB console
+ * went deaf and NVS pages were corrupted. Keep the heap out of it. */
+#define DUMP_SRAM_BASE  0x40830000u
+#define DUMP_SRAM_END   0x40840000u
+SOC_RESERVE_MEMORY_REGION(DUMP_SRAM_BASE, DUMP_SRAM_END, mac_dump_sram);
 
 /* Bootstrap channel used by C5VRX: 173 = 5865 MHz. */
 #define RF_BOOT_CHANNEL 173u
@@ -193,10 +207,12 @@ esp_err_t rf_frontend_start(uint16_t mhz, uint8_t gain_idx)
      * down RF/PHY and MODEM_DIAG stops clocking. */
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     cfg.sta_disconnected_pm = false;
+    node_trace("t10_wifi_init");
     if ((err = esp_wifi_init(&cfg)) != ESP_OK) return err;
     if ((err = esp_wifi_set_storage(WIFI_STORAGE_RAM)) != ESP_OK) return err;
     if ((err = esp_wifi_set_mode(WIFI_MODE_STA)) != ESP_OK) return err;
     if ((err = esp_wifi_start()) != ESP_OK) return err;
+    node_trace("t11_wifi_start");
     if ((err = esp_wifi_set_band_mode(WIFI_BAND_MODE_5G_ONLY)) != ESP_OK) return err;
     if ((err = esp_wifi_set_ps(WIFI_PS_NONE)) != ESP_OK) return err;
 
@@ -210,6 +226,7 @@ esp_err_t rf_frontend_start(uint16_t mhz, uint8_t gain_idx)
     if ((err = esp_wifi_set_bandwidths(WIFI_IF_STA, &bandwidths)) != ESP_OK) return err;
     if ((err = esp_wifi_set_channel(RF_BOOT_CHANNEL, WIFI_SECOND_CHAN_NONE)) != ESP_OK)
         return err;
+    node_trace("t12_channel");
 
     /* Promiscuous with a zero filter keeps the RX path active without the
      * LMAC buffering packets. */
@@ -217,13 +234,18 @@ esp_err_t rf_frontend_start(uint16_t mhz, uint8_t gain_idx)
     wifi_promiscuous_filter_t filter = {.filter_mask = 0};
     (void)esp_wifi_set_promiscuous_filter(&filter);
 
+    node_trace("t13_promisc");
     if ((err = lock_rx_only()) != ESP_OK) return err;
+    node_trace("t14_rx_only");
     if ((err = route_modem_iq()) != ESP_OK) return err;
+    node_trace("t15_route_iq");
     enable_continuous_modem();
+    node_trace("t16_modem");
 
     s_gain = gain_idx;
     s_mhz = 5865u;
     assert_receive_state();
+    node_trace("t17_rx_state");
 
     if (mhz != s_mhz) {
         err = rf_frontend_tune(mhz);
@@ -240,7 +262,9 @@ esp_err_t rf_frontend_tune(uint16_t mhz)
     if (!rf_frontend_can_tune(mhz)) return ESP_ERR_NOT_SUPPORTED;
 
     const wifi5_center_t *center = nearest_center(mhz);
+    node_trace("t70_tune_start");
     esp_err_t err = esp_wifi_set_channel(center->channel, WIFI_SECOND_CHAN_NONE);
+    node_trace("t71_set_channel");
     if (err != ESP_OK) return err;
 
     uint8_t primary = 0;
@@ -251,10 +275,15 @@ esp_err_t rf_frontend_tune(uint16_t mhz)
 
     /* EXPERIMENTAL (as in C5VRX): off-center FPV frequencies use the
      * undocumented phy_set_freq() from the nearest public center. */
-    if (mhz != center->mhz) phy_set_freq(mhz, 0);
+    if (mhz != center->mhz) {
+        node_trace("t72_set_freq_in");
+        phy_set_freq(mhz, 0);
+        node_trace("t73_set_freq_out");
+    }
 
     enable_continuous_modem();
     assert_receive_state();
+    node_trace("t74_tune_done");
     s_mhz = mhz;
     return ESP_OK;
 }

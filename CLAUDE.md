@@ -30,7 +30,10 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
   (R1/R3/R6/R7 matter) from the PhobosLT web UI.
   - The AP node owns the config and resends `F`/`G` until the RF node's `S`
     status matches.
-- **Only 5V, GND, D6 and D7 are joined between the boards.**
+- **Only 5V, GND, D5 and D9 are joined between the boards.**
+  - Not D6/D7: GPIO11/12 are the C5 UART0 console pins. Both chips' ROM
+    boot logs and the Arduino core's console are driven out on GPIO11, which
+    garbled the link (found on hardware 2026-09-30).
   - The RF node drives its IQ bus on D0-D3 and D10.
   - D2/D3 are strapping pins.
 - **Scope is single pilot for now.** Multi-pilot on one C5 would need fast retune
@@ -48,11 +51,14 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
 ## Status (2026-09-28)
 
 - Both firmwares build locally and in GitHub Actions, and the host tests pass.
-- **Nothing has been run on hardware yet.** Work through `docs/bring-up.md` in order.
+- **2026-09-30:** first hardware bring-up. The link works (D5/D9) and RSSI
+  responds to a VTX. Details and the fixes made are in `docs/bring-up.md`.
+- **Open:** the RF node's USB console is silent. Flash the RF node from manual
+  download mode; debug it through its NVS boot trace (namespace `trace`,
+  read with `nvs_tool.py`) and the AP node's link counters, which print every
+  10 s on the AP's USB console.
 - Unproven:
   - Tuning to R1/R3/R6/R7 (off-center channels use the undocumented `phy_set_freq`).
-  - Finite PARLIO soft-delimiter receives. If these fail, port C5VRX's
-    infinite ring and `get_completed_rx_sample_window()`.
   - The default gain of 40.
   - Desense from the 2.4 GHz AP.
   - XIAO battery sense on GPIO6/26, and whether the LED is active-low.

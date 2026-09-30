@@ -9,8 +9,8 @@
 
 #include "esp_err.h"
 
-/* 4096 bytes = 4096 complex samples = 102.4 us at 40 MS/s. */
-#define IQ_WINDOW_BYTES 4096u
+/* One completed GDMA descriptor: 4092 complex samples = 102.3 us at 40 MS/s. */
+#define IQ_WINDOW_BYTES 4092u
 
 typedef struct {
     float mean_power;       /* half-LSB^2 units, see rssi_scale.h */
@@ -20,6 +20,6 @@ typedef struct {
 
 esp_err_t iq_power_init(void);
 
-/* Captures one finite window and measures it. Blocks for ~0.1 ms plus
- * driver overhead. Must not be called concurrently. */
+/* Measures the most recently completed ring descriptor. Non-blocking
+ * (~0.1 ms of CPU). Must not be called concurrently. */
 esp_err_t iq_power_measure(iq_power_t *out);

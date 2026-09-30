@@ -74,6 +74,11 @@ the saved settings reset to defaults once.
 
 Unplug the AP node and plug in the RF node.
 
+> **Enter download mode by hand.** While the RF node firmware is running, its
+> USB serial port does not respond (see *Known issue* below), so esptool's
+> automatic reset fails with `Write timeout`. Before every RF node flash:
+> hold **BOOT**, tap **RESET** (or replug USB), then release BOOT.
+
 **Build.** Pick the command for your setup:
 
 ```sh
@@ -89,6 +94,7 @@ cd rf-node && idf.py set-target esp32c5 build && cd ..
 ```sh
 cd rf-node
 ~/.platformio/penv/bin/python -m esptool --chip esp32c5 -p /dev/ttyACM0 -b 921600 \
+  --before no_reset --after watchdog_reset \
   write_flash --flash_mode dio --flash_size 8MB --flash_freq 80m \
   0x2000  build/bootloader/bootloader.bin \
   0x8000  build/partition_table/partition-table.bin \
@@ -110,29 +116,33 @@ and only the underscore form works in both.
 
 The same list is in `rf-node/build/flasher_args.json` after a build.
 
-**Check the RF node**
+`--after watchdog_reset` starts the new firmware straight away. Pressing
+RESET afterwards works too.
 
-Open its USB console:
+**Check the RF node** through the AP node (step 3): the web UI's *RF node*
+line must show `OK <MHz> MHz gain <g> fw 1 samples …`, with `samples`
+climbing by about 1000 per second.
 
-```sh
-pio device monitor -p /dev/ttyACM0 -b 115200
-```
+**Known issue: the RF node's USB console.** On the first hardware test
+(2026-09-30) the RF node sent nothing over USB and never read input, even
+before any radio code ran and with the official USB-Serial-JTAG driver
+installed. The node itself runs normally; its boot trace in NVS showed that.
+This is still being investigated. Until it is fixed, `tools/rssi_log.py` and
+the console commands below do not work; use the AP node's Calibration tab.
 
-- At boot the log shows `RF ready: 5658 MHz, gain 40` and `RF node v1 running`.
-- Type `s` and press Enter. The reply is `STATUS,5658,40,OK,1`.
-- Exit the monitor with **Ctrl+C**.
-
-Other console commands:
+Console commands (for when USB works):
 
 | Command | Action |
 |---------|--------|
 | `f <mhz>` | Tune |
 | `g <gain>` | Set fixed gain (0–89) |
 | `r` | Toggle the RSSI CSV stream (used by `tools/rssi_log.py`) |
+| `d` | Diagnostics: boot stage and capture counters |
+| `t` | Boot trace saved in NVS |
 
 ## 3. Stack and run
 
-1. Join only **5V, GND, D6 and D7** between the boards (see `docs/hardware.md`).
+1. Join only **5V, GND, D5 and D9** between the boards (see `docs/hardware.md`).
 2. Power the stack from **one** USB cable, or from the battery.
 3. Open `http://20.0.0.1`. Within about a second the *RF node* line changes to
    `OK 5658 MHz gain 40 …`.
@@ -169,7 +179,7 @@ Continue with `docs/bring-up.md` for the hardware checks.
   `uploadfs` step again.
 - **RF node shows `DOWN` in the web UI:**
   - **UART wiring:** the roles are crossed **in firmware**, so do **not**
-    cross the wires. Connect D6 to D6 and D7 to D7, straight through, the same
+    cross the wires. Connect D5 to D5 and D9 to D9, straight through, the same
     way stacked headers line up.
   - **RF node firmware:** check it on its own over USB (`s` must reply
     `STATUS,…`).

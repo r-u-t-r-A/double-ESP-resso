@@ -26,7 +26,13 @@ void C5Link::send(const c5link_msg_t &msg) {
 bool C5Link::poll() {
     while (C5LINK_SERIAL.available() > 0) {
         c5link_msg_t m;
-        if (!c5link_rx_feed(&rx, (char)C5LINK_SERIAL.read(), &m)) continue;
+        int c = C5LINK_SERIAL.read();
+        rxBytes = rxBytes + 1;
+        rawTail[rawPos] = (uint8_t)c;
+        rawPos = (rawPos + 1) % sizeof(rawTail);
+        if (c == '\n') rxLines = rxLines + 1;
+        if (!c5link_rx_feed(&rx, (char)c, &m)) continue;
+        rxGood = rxGood + 1;
         if (m.type == C5LINK_MSG_STATUS) {
             rfMhz = m.mhz;
             rfGain = m.gain;
@@ -77,6 +83,18 @@ void C5Link::handleGainChange(uint32_t currentTimeMs, uint8_t gain) {
     g.type = C5LINK_MSG_GAIN;
     g.gain = gain;
     send(g);
+}
+
+void C5Link::debugStats(uint32_t currentTimeMs) {
+    if (currentTimeMs - statsMs < 10000) return;
+    statsMs = currentTimeMs;
+    char st[96];
+    statusString(st, sizeof(st), currentTimeMs);
+    char hex[sizeof(rawTail) * 3 + 1];
+    for (size_t i = 0; i < sizeof(rawTail); ++i)
+        snprintf(hex + i * 3, 4, "%02x ", rawTail[(rawPos + i) % sizeof(rawTail)]);
+    DEBUG("C5Link rx bytes=%lu lines=%lu good=%lu | %s | tail %s\n", (unsigned long)rxBytes,
+          (unsigned long)rxLines, (unsigned long)rxGood, st, hex);
 }
 
 bool C5Link::linkUp(uint32_t currentTimeMs) {

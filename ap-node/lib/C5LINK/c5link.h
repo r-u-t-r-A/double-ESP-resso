@@ -35,6 +35,9 @@ class C5Link {
         return linkUp(currentTimeMs) && (rfState == C5LINK_ST_OK || rfState == C5LINK_ST_TUNING);
     }
     void statusString(char *buf, size_t len, uint32_t currentTimeMs);
+    // Prints raw link counters and the last raw bytes to the debug console
+    // every 10 s (bring-up aid).
+    void debugStats(uint32_t currentTimeMs);
 
    private:
     uint8_t rxPin;
@@ -46,6 +49,12 @@ class C5Link {
     uint8_t lastSeq = 0;
     volatile uint32_t samples = 0;
     volatile uint32_t dropped = 0;
+    volatile uint32_t rxBytes = 0;
+    volatile uint32_t rxLines = 0;
+    volatile uint32_t rxGood = 0;
+    uint32_t statsMs = 0;
+    uint8_t rawTail[24] = {0};
+    uint8_t rawPos = 0;
 
     volatile bool statusSeen = false;
     volatile uint32_t statusTimeMs = 0;

@@ -19,7 +19,9 @@
 */
 
 //double-ESP-resso: Seeed XIAO ESP32-C5 stacked on the RF node XIAO.
-//Only 5V, GND, D6 and D7 are joined; the RF node drives its IQ bus on D0-D3/D10.
+//Only 5V, GND, D5 and D9 are joined; the RF node drives its IQ bus on D0-D3/D10.
+//D6/D7 (GPIO11/12) are the C5 UART0 console pins: the core's log output is
+//driven out on GPIO11, so they cannot carry the link.
 #if defined(C5VRX_LINK)
 
 #define PIN_LED 27            //XIAO user LED, active low
@@ -28,8 +30,8 @@
 #define PIN_VBAT_EN 26
 #define VBAT_SCALE 2
 #define VBAT_ADD 2
-#define PIN_C5LINK_RX 11      //D6 <- RF node TX
-#define PIN_C5LINK_TX 12      //D7 -> RF node RX
+#define PIN_C5LINK_RX 24      //D5 <- RF node TX
+#define PIN_C5LINK_TX 9       //D9 -> RF node RX
 #define PIN_BUZZER 8          //D8
 #define PIN_LED_STRIP 23      //D4, WS2812B data (330R series resistor)
 #define BUZZER_INVERTED false

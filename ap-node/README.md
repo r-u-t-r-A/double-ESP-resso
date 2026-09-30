@@ -9,7 +9,7 @@ commit `142cf08`, MIT licensed. The upstream README is kept as
 Everything is behind `-DC5VRX_LINK`, so the upstream environments are unchanged.
 
 - **`lib/C5LINK/`** (new): an RSSI source that reads the RF node over UART1
-  (RX D6/GPIO11, TX D7/GPIO12). Its interface matches the `RX5808` class:
+  (RX D5/GPIO24, TX D9/GPIO9). Its interface matches the `RX5808` class:
   - `readRssi()` returns the latest RSSI sample.
   - `handleFrequencyChange()` retunes the RF node.
   - It adds `handleGainChange()`, a non-blocking `poll()`, and link status.

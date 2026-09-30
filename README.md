@@ -12,7 +12,7 @@ boards** and no RX5808 module.
 
 ```
  drone VTX ~~ 5.8 GHz ~~>  [ RF node  XIAO ESP32-C5 ]  MODEM_DIAG IQ -> power -> RSSI 0-255 @ 1 kHz
-                                 |  D6/D7 UART, both directions
+                                 |  D5/D9 UART, both directions
                            [ AP node  XIAO ESP32-C5 ]  PhobosLT lap logic + web UI
  phone / laptop <~~ 2.4 GHz Wi-Fi AP "PhobosLT_xxxxxx" ~~
 ```
@@ -52,7 +52,7 @@ experimental `phy_set_freq()` step that C5VRX uses.
   - A **WS2812B strip around the gate** on the AP node's D4, with its own
     5 V supply. See [docs/hardware.md](docs/hardware.md#ws2812b-gate-led-strip-ap-node-d4).
 
-**Join only these four pins between the boards:** 5V, GND, D6 and D7. The RF
+**Join only these four pins between the boards:** 5V, GND, D5 and D9. The RF
 node streams its 40–80 MHz IQ bus out on D0–D3 and D10, and D2/D3 are
 strapping pins, so a full pin-to-pin stack is not safe. See
 [docs/hardware.md](docs/hardware.md).

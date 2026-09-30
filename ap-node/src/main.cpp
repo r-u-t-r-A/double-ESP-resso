@@ -45,6 +45,7 @@ static void parallelTask(void *pvArgs) {
         rx.handleFrequencyChange(currentTimeMs, config.getFrequency());
 #ifdef C5VRX_LINK
         rx.handleGainChange(currentTimeMs, config.getRfGain());
+        rx.debugStats(currentTimeMs);
 #endif
         monitor.checkBatteryState(currentTimeMs, config.getAlarmThreshold());
 #ifdef PIN_LED_STRIP

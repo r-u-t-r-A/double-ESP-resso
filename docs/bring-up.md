@@ -1,6 +1,25 @@
 # Hardware bring-up checklist
 
-Nothing below has been done yet. Record the results here (with dates) as they are measured.
+Record the results here (with dates) as they are measured.
+
+## Results so far
+
+**2026-09-30, first hardware session**
+- **AP node:**
+  - The web UI failed until the LittleFS image was built as disk version 2.0.
+  - The link initially failed because D6/D7 carry the C5's UART0 console on
+    both boards. It was moved to D5/D9.
+- **RF node:**
+  - **Capture:** the finite per-sample PARLIO receive starved the CPU after
+    the first capture. It was replaced with C5VRX's interrupt-free continuous
+    ring.
+  - **Memory:** the MAC dump window 0x40830000–0x4083FFFF is now reserved
+    from the heap.
+- **Link:** works. The AP shows `OK 5880 MHz gain 40 fw 1`, with about 1000
+  samples/s and no drops after startup.
+- **RSSI:** reads 0 with no transmitter on the channel. It responds with a VTX
+  on the channel and more gain ("works somewhat"). It is not calibrated yet.
+- **Open issue:** the RF node's USB console stays silent (see `FLASHING.md`).
 
 ## 1. RF node alone (USB)
 
