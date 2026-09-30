@@ -69,6 +69,8 @@ strapping pins, so a full pin-to-pin stack is not safe. See
 
 ## Build and flash
 
+Step-by-step flashing instructions for both boards are in **[FLASHING.md](FLASHING.md)**. The commands below are a short version.
+
 Plug in **one board at a time**; the other board is powered through the 5V link.
 
 ### RF node
