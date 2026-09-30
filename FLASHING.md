@@ -89,7 +89,7 @@ cd rf-node && idf.py set-target esp32c5 build && cd ..
 ```sh
 cd rf-node
 ~/.platformio/penv/bin/python -m esptool --chip esp32c5 -p /dev/ttyACM0 -b 921600 \
-  write-flash --flash-mode dio --flash-size 8MB --flash-freq 80m \
+  write_flash --flash_mode dio --flash_size 8MB --flash_freq 80m \
   0x2000  build/bootloader/bootloader.bin \
   0x8000  build/partition_table/partition-table.bin \
   0x10000 build/rf-node.bin
@@ -97,6 +97,10 @@ cd rf-node
 
 With a local ESP-IDF you can run `idf.py -p /dev/ttyACM0 flash` from `rf-node/`
 instead.
+
+Use the underscore spelling (`write_flash`, `--flash_mode`) shown above.
+PlatformIO may install esptool v4 or v5 depending on which platform ran last,
+and only the underscore form works in both.
 
 | Address | File (in `rf-node/build/`) |
 |---------|----------------------------|
@@ -151,9 +155,22 @@ Continue with `docs/bring-up.md` for the hardware checks.
   firmware: add this before flashing:
 
   ```sh
-  ~/.platformio/penv/bin/python -m esptool --chip esp32c5 -p /dev/ttyACM0 erase-flash
+  ~/.platformio/penv/bin/python -m esptool --chip esp32c5 -p /dev/ttyACM0 erase_flash
   ```
 
   This also clears the RF node's saved channel and gain, and the AP node's settings.
+- **`Handler did not handle the request` at `http://20.0.0.1`:** the web UI
+  filesystem did not mount. The serial log shows `Mounting LittleFS failed`.
+  - The ESP32-C5 Arduino core only mounts LittleFS **disk version 2.0**, and
+    the platform builds 2.1 images by default. `targets/XIAO_C5.ini` sets
+    `board_build.littlefs_version = 2.0`.
+  - Pull the latest repo and run the `uploadfs` step again.
 - **Web UI missing or showing old pages** after an AP firmware update: run the
   `uploadfs` step again.
+- **RF node shows `DOWN` in the web UI:**
+  - **UART wiring:** the roles are crossed **in firmware**, so do **not**
+    cross the wires. Connect D6 to D6 and D7 to D7, straight through, the same
+    way stacked headers line up.
+  - **RF node firmware:** check it on its own over USB (`s` must reply
+    `STATUS,…`).
+  - **Power:** check that the boards share GND and 5V.
