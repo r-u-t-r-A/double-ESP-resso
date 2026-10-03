@@ -8,7 +8,8 @@ boards** and no RX5808 module.
   [C5VRX](https://github.com/Twotoz/C5VRX).
 - The **AP node** runs a port of [PhobosLT](https://github.com/phobos-/PhobosLT):
   a 2.4 GHz Wi-Fi access point, the web UI, lap detection, voice callouts and
-  RSSI calibration.
+  RSSI calibration. Voice callouts need an offline browser voice; see
+  [docs/VOICE.md](docs/VOICE.md).
 
 ```
  drone VTX ~~ 5.8 GHz ~~>  [ RF node  XIAO ESP32-C5 ]  MODEM_DIAG IQ -> power -> RSSI 0-255 @ 1 kHz
