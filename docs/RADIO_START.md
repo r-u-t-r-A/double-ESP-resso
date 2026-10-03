@@ -87,6 +87,23 @@ won't start. Fix it by choosing ▲ or inverting the mix in step 2.
 The web UI's *Start Race* button uses exactly the same countdown on the timer,
 so the button and the radio behave the same way.
 
+## Troubleshooting
+
+`http://20.0.0.1/status` shows an ELRS block under `ELRS Backpack:`. The AP
+node's USB serial log (460800 baud) prints the same block every 10 s. Press the
+radio button a few times, reload the page, and work down the list:
+
+| Line | What it tells you |
+| --- | --- |
+| `Start errors` | All three should be `0`. A non-zero `mac` or `esp_now` value means ESP-NOW couldn't start on the C5. |
+| `UID … (STA MAC …, channel …)` | The STA MAC must equal the UID, and the channel must be `1`. |
+| `On air` | Every ESP-NOW frame the timer hears on its channel, from any device. **0** means the backpack isn't transmitting on channel 1: check that Backpack is On, DVR Rec is set, and the TX firmware is 2.3.0 or newer. |
+| `On air … last A -> B` | The backpack's real UID. If `B` differs from `UID`, the bind phrases differ: rebind the backpack or fix the phrase on the timer. |
+| `Received` | Frames ESP-NOW delivered to the timer. If `On air` counts up but this stays at 0, the STA MAC override isn't taking effect. |
+| `From UID` / `MSP ok` | Frames from the bound backpack, and the ones that parsed. |
+| `DVR switch` | Recording-state messages. If other functions arrive (`last function`) but none of these, the DVR Rec AUX setting isn't sending. |
+| `Presses` | Classified presses. If presses are counted but the race doesn't start, the timer was already running or counting down. |
+
 ## Notes and limitations
 
 - **One message per press edge.** The backpack sends each change once, without

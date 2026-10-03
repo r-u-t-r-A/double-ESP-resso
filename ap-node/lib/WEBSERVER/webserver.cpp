@@ -288,7 +288,7 @@ void Webserver::startServices() {
     server.on("/fwlink", handleRoot);
 
     server.on("/status", [this](AsyncWebServerRequest *request) {
-        char buf[1536];
+        char buf[2048];
         char configBuf[CONFIG_JSON_SIZE];
         conf->toJsonString(configBuf);
         char rfBuf[96] = "n/a";
@@ -296,6 +296,7 @@ void Webserver::startServices() {
         if (rssiSource) rssiSource->statusString(rfBuf, sizeof(rfBuf), millis());
 #endif
         const char *elrsStatus = "n/a";
+        char elrsDetail[512] = "";
 #ifdef ELRS_BACKPACK
         if (elrs) {
             if (elrs->isActive()) {
@@ -304,8 +305,14 @@ void Webserver::startServices() {
                 elrsStatus = "off";
             } else if (!elrs_uid_is_set(conf->getElrsMac())) {
                 elrsStatus = "no bind phrase";
+            } else if (elrs->wasStarted()) {
+                elrsStatus = "start failed, see errors below";
             } else {
                 elrsStatus = "not running (AP mode only)";
+            }
+            if (elrs->wasStarted()) {
+                elrs->statusString(elrsDetail, sizeof(elrsDetail) - 1, millis());
+                strcat(elrsDetail, "\n");
             }
         }
 #endif
@@ -332,12 +339,13 @@ EEPROM:\n\
 %s\n\
 RF Node:\t%s\n\
 ELRS Backpack:\t%s\n\
+%s\
 Battery Voltage:\t%0.1fv";
 
         snprintf(buf, sizeof(buf), format,
                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getHeapSize(), ESP.getMaxAllocHeap(), LittleFS.usedBytes(), LittleFS.totalBytes(),
                  ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores(), ESP.getSdkVersion(), ESP.getFlashChipSize(), ESP.getFlashChipSpeed() / 1000000, getCpuFrequencyMhz(),
-                 WiFi.localIP().toString().c_str(), WiFi.macAddress().c_str(), configBuf, rfBuf, elrsStatus, voltage);
+                 WiFi.localIP().toString().c_str(), WiFi.macAddress().c_str(), configBuf, rfBuf, elrsStatus, elrsDetail, voltage);
         request->send(200, "text/plain", buf);
         led->on(200);
     });

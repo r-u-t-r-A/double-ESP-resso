@@ -23,6 +23,7 @@ static ElrsBackpack elrs;
 // Short press starts the countdown, long press stops or cancels it.
 static void handleRadioButton(uint32_t currentTimeMs) {
     elrs_press_e press = elrs.handle(currentTimeMs, config.getElrsEnabled(), config.getElrsMac());
+    elrs.debugStats(currentTimeMs);
     if (press == ELRS_PRESS_SHORT && race.isIdle()) {
         buzzer.beep(60);
         race.requestBegin();
@@ -87,8 +88,8 @@ static void parallelTask(void *pvArgs) {
 static void initParallelTask() {
     disableCore0WDT();
 #ifdef ELRS_BACKPACK
-    // esp_now_init() and esp_wifi_set_mac() run on this task.
-    xTaskCreatePinnedToCore(parallelTask, "parallelTask", 4096, NULL, 0, &xTimerTask, 0);
+    // esp_now_init(), esp_wifi_set_mac() and the ELRS stats printf run on this task.
+    xTaskCreatePinnedToCore(parallelTask, "parallelTask", 6144, NULL, 0, &xTimerTask, 0);
 #else
     xTaskCreatePinnedToCore(parallelTask, "parallelTask", 3000, NULL, 0, &xTimerTask, 0);
 #endif
