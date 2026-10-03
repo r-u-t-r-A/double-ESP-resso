@@ -3,6 +3,9 @@
 #include <EEPROM.h>
 
 #include "debug.h"
+#ifdef ELRS_BACKPACK
+#include "elrs_backpack.h"
+#endif
 
 void Config::init(void) {
     if (sizeof(laptimer_config_t) > EEPROM_RESERVED_SIZE) {
@@ -25,6 +28,15 @@ void Config::load(void) {
     uint32_t version = 0xFFFFFFFF;
     if ((conf.version & CONFIG_MAGIC_MASK) == CONFIG_MAGIC) {
         version = conf.version & ~CONFIG_MAGIC_MASK;
+    }
+
+    // v2 -> v3 only appended the ELRS fields.
+    if (version == 2U) {
+        memset(conf.elrsMac, 0, sizeof(conf.elrsMac));
+        conf.elrsEnabled = 0;
+        conf.version = CONFIG_VERSION | CONFIG_MAGIC;
+        version = CONFIG_VERSION;
+        modified = true;
     }
 
     // If version is not current, reset to defaults
@@ -67,6 +79,15 @@ void Config::toJson(AsyncResponseStream& destination) {
     config["ledCount"] = conf.ledCount;
     config["ledBright"] = conf.ledBrightness;
 #endif
+#ifdef C5VRX_LINK
+    config["raceCtl"] = 1;
+#endif
+#ifdef ELRS_BACKPACK
+    char mac[18];
+    formatElrsMac(mac);
+    config["elrsOn"] = conf.elrsEnabled;
+    config["elrsUid"] = mac;
+#endif
     serializeJson(config, destination);
 }
 
@@ -89,6 +110,12 @@ void Config::toJsonString(char* buf) {
     config["ledOn"] = conf.ledEnabled;
     config["ledCount"] = conf.ledCount;
     config["ledBright"] = conf.ledBrightness;
+#endif
+#ifdef ELRS_BACKPACK
+    char mac[18];
+    formatElrsMac(mac);
+    config["elrsOn"] = conf.elrsEnabled;
+    config["elrsUid"] = mac;
 #endif
     serializeJsonPretty(config, buf, CONFIG_JSON_SIZE);
 }
@@ -162,6 +189,47 @@ void Config::fromJson(JsonObject source) {
             modified = true;
         }
     }
+#ifdef ELRS_BACKPACK
+    if (source["elrsOn"].is<int>()) {
+        uint8_t on = source["elrsOn"] ? 1 : 0;
+        if (on != conf.elrsEnabled) {
+            conf.elrsEnabled = on;
+            modified = true;
+        }
+    }
+    // The phrase itself is never stored, only the MAC derived from it.
+    const char* phrase = source["elrsPhrase"] | "";
+    if (phrase[0] != 0) {
+        uint8_t mac[ELRS_MAC_LEN];
+        elrsMacFromPhrase(phrase, mac);
+        if (memcmp(mac, conf.elrsMac, sizeof(mac)) != 0) {
+            memcpy(conf.elrsMac, mac, sizeof(mac));
+            modified = true;
+        }
+    }
+#endif
+}
+
+#ifdef ELRS_BACKPACK
+void Config::formatElrsMac(char* buf) {
+    if (!elrs_uid_is_set(conf.elrsMac)) {
+        buf[0] = 0;
+        return;
+    }
+    snprintf(buf, 18, "%02x:%02x:%02x:%02x:%02x:%02x", conf.elrsMac[0], conf.elrsMac[1], conf.elrsMac[2], conf.elrsMac[3], conf.elrsMac[4], conf.elrsMac[5]);
+}
+#endif
+
+uint8_t Config::getAnnouncerRate() {
+    return conf.announcerRate;
+}
+
+bool Config::getElrsEnabled() {
+    return conf.elrsEnabled != 0;
+}
+
+const uint8_t* Config::getElrsMac() {
+    return conf.elrsMac;
 }
 
 uint16_t Config::getFrequency() {

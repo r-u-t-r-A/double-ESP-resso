@@ -6,10 +6,17 @@
 #ifdef PIN_LED_STRIP
 #include "ledstrip.h"
 #endif
+#ifdef C5VRX_LINK
+#include "racecontrol.h"
+#endif
+#ifdef ELRS_BACKPACK
+#include "elrs_backpack.h"
+#endif
 
 #define WIFI_CONNECTION_TIMEOUT_MS 30000
 #define WIFI_RECONNECT_TIMEOUT_MS 500
 #define WEB_RSSI_SEND_TIMEOUT_MS 200
+#define WIFI_AP_CHANNEL 1  // the ELRS backpack's fixed ESP-NOW channel
 
 class Webserver {
    public:
@@ -20,6 +27,12 @@ class Webserver {
 #endif
 #ifdef PIN_LED_STRIP
     void setLedStrip(LedStrip *s) { ledStrip = s; }
+#endif
+#ifdef C5VRX_LINK
+    void setRaceControl(RaceControl *r);
+#endif
+#ifdef ELRS_BACKPACK
+    void setElrsBackpack(ElrsBackpack *b) { elrs = b; }
 #endif
 
    private:
@@ -37,6 +50,12 @@ class Webserver {
 #endif
 #ifdef PIN_LED_STRIP
     LedStrip *ledStrip = nullptr;
+#endif
+#ifdef C5VRX_LINK
+    RaceControl *race = nullptr;
+#endif
+#ifdef ELRS_BACKPACK
+    ElrsBackpack *elrs = nullptr;
 #endif
 
     wifi_mode_t wifiMode = WIFI_OFF;

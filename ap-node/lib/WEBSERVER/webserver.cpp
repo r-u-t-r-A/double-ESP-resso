@@ -74,6 +74,19 @@ void Webserver::sendLaptimeEvent(uint32_t lapTime) {
     events.send(buf, "lap");
 }
 
+#ifdef C5VRX_LINK
+static void sendRaceEvent(const char *event, uint32_t value) {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%u", value);
+    events.send(buf, event);
+}
+
+void Webserver::setRaceControl(RaceControl *r) {
+    race = r;
+    race->setNotifier(sendRaceEvent);
+}
+#endif
+
 void Webserver::handleWebUpdate(uint32_t currentTimeMs) {
     if (timer->isLapAvailable()) {
         sendLaptimeEvent(timer->getLapTime());
@@ -128,18 +141,30 @@ void Webserver::handleWebUpdate(uint32_t currentTimeMs) {
                 WiFi.disconnect();
                 wifiMode = WIFI_AP;
                 WiFi.setHostname(wifi_hostname);  // hostname must be set before the mode is set to STA
+#ifdef ELRS_BACKPACK
+                // ESP-NOW from the ELRS backpack arrives on the STA interface, channel 1.
+                WiFi.mode(WIFI_AP_STA);
+#else
                 WiFi.mode(wifiMode);
+#endif
                 applyRadioLimits();
                 changeTimeMs = currentTimeMs;
                 WiFi.softAPConfig(ipAddress, ipAddress, netMsk);
-                WiFi.softAP(wifi_ap_ssid.c_str(), wifi_ap_password);
+                WiFi.softAP(wifi_ap_ssid.c_str(), wifi_ap_password, WIFI_AP_CHANNEL);
                 applyRadioLimits();
+#ifdef ELRS_BACKPACK
+                if (elrs) elrs->setRadioReady(true);
+#endif
                 startServices();
                 buz->beep(1000);
                 led->on(1000);
                 break;
             case WIFI_STA:
                 DEBUG("Connecting to WiFi network\n");
+#ifdef ELRS_BACKPACK
+                // The router picks the channel; ESP-NOW needs channel 1.
+                if (elrs) elrs->setRadioReady(false);
+#endif
                 wifiMode = WIFI_STA;
                 WiFi.setHostname(wifi_hostname);  // hostname must be set before the mode is set to STA
                 WiFi.mode(wifiMode);
@@ -263,12 +288,26 @@ void Webserver::startServices() {
     server.on("/fwlink", handleRoot);
 
     server.on("/status", [this](AsyncWebServerRequest *request) {
-        char buf[1280];
+        char buf[1536];
         char configBuf[CONFIG_JSON_SIZE];
         conf->toJsonString(configBuf);
         char rfBuf[96] = "n/a";
 #ifdef C5VRX_LINK
         if (rssiSource) rssiSource->statusString(rfBuf, sizeof(rfBuf), millis());
+#endif
+        const char *elrsStatus = "n/a";
+#ifdef ELRS_BACKPACK
+        if (elrs) {
+            if (elrs->isActive()) {
+                elrsStatus = "listening";
+            } else if (!conf->getElrsEnabled()) {
+                elrsStatus = "off";
+            } else if (!elrs_uid_is_set(conf->getElrsMac())) {
+                elrsStatus = "no bind phrase";
+            } else {
+                elrsStatus = "not running (AP mode only)";
+            }
+        }
 #endif
         float voltage = (float)monitor->getBatteryVoltage() / 10;
         const char *format =
@@ -292,12 +331,13 @@ Network:\n\
 EEPROM:\n\
 %s\n\
 RF Node:\t%s\n\
+ELRS Backpack:\t%s\n\
 Battery Voltage:\t%0.1fv";
 
         snprintf(buf, sizeof(buf), format,
                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getHeapSize(), ESP.getMaxAllocHeap(), LittleFS.usedBytes(), LittleFS.totalBytes(),
                  ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores(), ESP.getSdkVersion(), ESP.getFlashChipSize(), ESP.getFlashChipSpeed() / 1000000, getCpuFrequencyMhz(),
-                 WiFi.localIP().toString().c_str(), WiFi.macAddress().c_str(), configBuf, rfBuf, voltage);
+                 WiFi.localIP().toString().c_str(), WiFi.macAddress().c_str(), configBuf, rfBuf, elrsStatus, voltage);
         request->send(200, "text/plain", buf);
         led->on(200);
     });
@@ -316,8 +356,24 @@ Battery Voltage:\t%0.1fv";
         request->send(200, "application/json", "{\"status\": \"OK\"}");
     });
 
+#ifdef C5VRX_LINK
+    // Firmware start sequence, shared with the ELRS radio button.
+    server.on("/timer/begin", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (race) race->requestBegin();
+        request->send(200, "application/json", "{\"status\": \"OK\"}");
+    });
+#endif
+
     server.on("/timer/stop", HTTP_POST, [this](AsyncWebServerRequest *request) {
+#ifdef C5VRX_LINK
+        if (race) {
+            race->requestStop();
+        } else {
+            timer->stop();
+        }
+#else
         timer->stop();
+#endif
         request->send(200, "application/json", "{\"status\": \"OK\"}");
     });
 

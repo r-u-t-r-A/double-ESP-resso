@@ -1,3 +1,5 @@
+#pragma once
+
 #ifdef C5VRX_LINK
 #include "c5link.h"
 typedef C5Link RssiSource;

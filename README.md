@@ -9,7 +9,9 @@ boards** and no RX5808 module.
 - The **AP node** runs a port of [PhobosLT](https://github.com/phobos-/PhobosLT):
   a 2.4 GHz Wi-Fi access point, the web UI, lap detection, voice callouts and
   RSSI calibration. Voice callouts need an offline browser voice; see
-  [docs/VOICE.md](docs/VOICE.md).
+  [docs/VOICE.md](docs/VOICE.md). Races can be started and stopped from an
+  ExpressLRS radio button through its TX backpack; see
+  [docs/RADIO_START.md](docs/RADIO_START.md).
 
 ```
  drone VTX ~~ 5.8 GHz ~~>  [ RF node  XIAO ESP32-C5 ]  MODEM_DIAG IQ -> power -> RSSI 0-255 @ 1 kHz
@@ -109,6 +111,7 @@ matches newer ESPAsyncWebServer releases.
 ```sh
 cc -std=c99 -Wall -Wextra -Werror -I common tests/test_c5link_proto.c -o /tmp/t_proto && /tmp/t_proto
 cc -std=c99 -Wall -Wextra -Werror -I rf-node/main tests/test_rssi_scale.c -lm -o /tmp/t_rssi && /tmp/t_rssi
+cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/ELRSBACKPACK tests/test_elrs_msp.c -o /tmp/t_elrs && /tmp/t_elrs
 ```
 
 ## Using it

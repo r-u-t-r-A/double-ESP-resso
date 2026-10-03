@@ -32,14 +32,28 @@ Everything is behind `-DC5VRX_LINK`, so the upstream environments are unchanged.
   - Colours depend on race state, laps, RSSI, RF link health and the battery alarm.
 - **`lib/CONFIG`** also stores `ledOn`, `ledCount` and `ledBright`, with
   `CONFIG_VERSION` bumped to 2.
-- **`lib/WEBSERVER`** adds `POST /timer/arm`, which turns the gate red during
-  the browser countdown.
+  - Version 3 appends `elrsOn` and the ELRS backpack UID; v2 settings are kept.
+- **`lib/RACECONTROL/`** (new): runs the start countdown on the node.
+  - It arms the gate, waits for the spoken lead-in plus a random 1–5 s, then
+    starts the lap timer.
+  - It reports `raceArm` / `raceStart` / `raceStop` as SSE events.
+- **`lib/ELRSBACKPACK/`** (new, `-DELRS_BACKPACK`): starts and stops races
+  from an ExpressLRS radio button via the TX backpack's ESP-NOW messages. See
+  [../docs/RADIO_START.md](../docs/RADIO_START.md).
+- **`lib/WEBSERVER`** adds:
+  - `POST /timer/begin`, which starts the firmware countdown. `/timer/stop` also
+    cancels a countdown.
+  - `POST /timer/arm`, which turns the gate red during the countdown. It's kept
+    for the old browser countdown.
+  - In AP mode, the SoftAP runs on channel 1 as `WIFI_AP_STA`, for ESP-NOW.
 - **`data/`** (web UI):
   - Shows the RF node status and an RF gain field. These appear only when
     `/config` includes `rfGain`.
   - Warns about channels the C5 can't tune.
   - LED strip settings.
-  - *Start Race* posts `/timer/arm`.
+  - *Start Race* posts `/timer/begin` when `/config` includes `raceCtl`, and
+    otherwise runs the old browser countdown.
+  - ELRS radio-start settings, shown only when `/config` includes `elrsUid`.
 
 ## Build
 

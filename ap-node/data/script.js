@@ -20,6 +20,12 @@ const ledCountInput = document.getElementById("ledCount");
 const ledBrightInput = document.getElementById("ledBright");
 const ledBrightSpan = document.getElementById("ledBrightSpan");
 var ledStrip = false;
+const elrsOnInput = document.getElementById("elrsOn");
+const elrsPhraseInput = document.getElementById("elrsPhrase");
+const elrsUidDisplay = document.getElementById("elrsUid");
+var elrsBackpack = false;
+// Firmware runs the start countdown (/timer/begin + raceArm/raceStart/raceStop events).
+var raceCtl = false;
 
 // double-ESP-resso: the C5 RF node tunes 5180-5885 MHz only.
 var rfNode = false;
@@ -104,6 +110,12 @@ onload = function (e) {
         ledBrightInput.value = config.ledBright;
         ledBrightSpan.textContent = config.ledBright;
         document.querySelectorAll(".ledstrip-only").forEach((el) => (el.style.display = ""));
+      }
+      raceCtl = config.raceCtl !== undefined;
+      if (config.elrsUid !== undefined) {
+        elrsBackpack = true;
+        showElrsConfig(config);
+        document.querySelectorAll(".elrs-only").forEach((el) => (el.style.display = ""));
       }
       populateFreqOutput();
       stopRaceButton.disabled = true;
@@ -294,10 +306,29 @@ function saveConfig() {
             ledBright: Math.max(0, Math.min(255, parseInt(ledBrightInput.value) || 0)),
           }
         : {}),
+      ...(elrsBackpack
+        ? {
+            elrsOn: elrsOnInput.checked ? 1 : 0,
+            ...(elrsPhraseInput.value !== "" ? { elrsPhrase: elrsPhraseInput.value } : {}),
+          }
+        : {}),
     }),
   })
     .then((response) => response.json())
-    .then((response) => console.log("/config:" + JSON.stringify(response)));
+    .then((response) => {
+      console.log("/config:" + JSON.stringify(response));
+      if (elrsBackpack) {
+        elrsPhraseInput.value = "";
+        fetch("/config")
+          .then((r) => r.json())
+          .then(showElrsConfig);
+      }
+    });
+}
+
+function showElrsConfig(config) {
+  elrsOnInput.checked = !!config.elrsOn;
+  elrsUidDisplay.textContent = config.elrsUid || "not set";
 }
 
 function populateFreqOutput() {
@@ -413,6 +444,21 @@ function addLap(lapStr) {
 }
 
 function startTimer() {
+  startTimerDisplay();
+
+  fetch("/timer/start", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+  })
+    .then((response) => response.json())
+    .then((response) => console.log("/timer/start:" + JSON.stringify(response)));
+}
+
+function startTimerDisplay() {
+  clearInterval(timerInterval);
   var millis = 0;
   var seconds = 0;
   var minutes = 0;
@@ -437,16 +483,6 @@ function startTimer() {
     let ms = millis < 10 ? "0" + millis : millis;
     timer.innerHTML = `${m}:${s}:${ms}s`;
   }, 10);
-
-  fetch("/timer/start", {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-  })
-    .then((response) => response.json())
-    .then((response) => console.log("/timer/start:" + JSON.stringify(response)));
 }
 
 function queueSpeak(obj) {
@@ -491,6 +527,13 @@ function doSpeak(obj) {
 
 async function startRace() {
   startRaceButton.disabled = true;
+  if (raceCtl) {
+    // The AP node runs the countdown and reports it through raceArm/raceStart.
+    fetch("/timer/begin", { method: "POST" }).catch(() => {
+      startRaceButton.disabled = false;
+    });
+    return;
+  }
   // Gate lights go red for the countdown (ignored by boards without a strip).
   fetch("/timer/arm", { method: "POST" }).catch(() => {});
   // Calculate time taken to say starting phrase
@@ -515,6 +558,11 @@ async function startRace() {
 }
 
 function stopRace() {
+  if (raceCtl) {
+    // UI resets on the raceStop event, which radio stops send too.
+    fetch("/timer/stop", { method: "POST" }).catch(() => {});
+    return;
+  }
   queueSpeak('<p>Race stopped</p>');
   clearInterval(timerInterval);
   timer.innerHTML = "00:00:00s";
@@ -588,6 +636,31 @@ if (!!window.EventSource) {
     },
     false
   );
+
+  source.addEventListener("raceArm", function (e) {
+    startRaceButton.disabled = true;
+    stopRaceButton.disabled = false;
+    queueSpeak("<p>Arm your quad</p>");
+    queueSpeak("<p>Starting on the tone in less than five</p>");
+  });
+
+  source.addEventListener("raceStart", function (e) {
+    beep(1, 1, "square"); // needed for some reason to make sure we fire the first beep
+    beep(500, 880, "square");
+    startTimerDisplay();
+    startRaceButton.disabled = true;
+    stopRaceButton.disabled = false;
+  });
+
+  source.addEventListener("raceStop", function (e) {
+    queueSpeak("<p>Race stopped</p>");
+    clearInterval(timerInterval);
+    timer.innerHTML = "00:00:00s";
+    stopRaceButton.disabled = true;
+    startRaceButton.disabled = false;
+    lapNo = -1;
+    lapTimes = [];
+  });
 }
 
 function setBandChannelIndex(freq) {

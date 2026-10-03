@@ -9,10 +9,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Protocol and RSSI scaling tests
+      - name: Protocol, RSSI scaling and ELRS backpack tests
         run: |
           cc -std=c99 -Wall -Wextra -Werror -I common tests/test_c5link_proto.c -o t_proto && ./t_proto
           cc -std=c99 -Wall -Wextra -Werror -I rf-node/main tests/test_rssi_scale.c -lm -o t_rssi && ./t_rssi
+          cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/ELRSBACKPACK tests/test_elrs_msp.c -o t_elrs && ./t_elrs
 
   rf-node:
     runs-on: ubuntu-latest

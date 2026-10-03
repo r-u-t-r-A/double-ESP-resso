@@ -14,6 +14,24 @@ static Buzzer buzzer;
 static Led led;
 static LapTimer timer;
 static BatteryMonitor monitor;
+#ifdef C5VRX_LINK
+static RaceControl race;
+#endif
+#ifdef ELRS_BACKPACK
+static ElrsBackpack elrs;
+
+// Short press starts the countdown, long press stops or cancels it.
+static void handleRadioButton(uint32_t currentTimeMs) {
+    elrs_press_e press = elrs.handle(currentTimeMs, config.getElrsEnabled(), config.getElrsMac());
+    if (press == ELRS_PRESS_SHORT && race.isIdle()) {
+        buzzer.beep(60);
+        race.requestBegin();
+    } else if (press == ELRS_PRESS_LONG && !race.isIdle()) {
+        buzzer.beep(60);
+        race.requestStop();
+    }
+}
+#endif
 #ifdef PIN_LED_STRIP
 static LedStrip ledStrip;
 
@@ -47,6 +65,12 @@ static void parallelTask(void *pvArgs) {
         rx.handleGainChange(currentTimeMs, config.getRfGain());
         rx.debugStats(currentTimeMs);
 #endif
+#ifdef ELRS_BACKPACK
+        handleRadioButton(currentTimeMs);
+#endif
+#ifdef C5VRX_LINK
+        race.handleRaceControl(currentTimeMs);
+#endif
         monitor.checkBatteryState(currentTimeMs, config.getAlarmThreshold());
 #ifdef PIN_LED_STRIP
         handleGateLights(currentTimeMs);
@@ -62,7 +86,12 @@ static void parallelTask(void *pvArgs) {
 
 static void initParallelTask() {
     disableCore0WDT();
+#ifdef ELRS_BACKPACK
+    // esp_now_init() and esp_wifi_set_mac() run on this task.
+    xTaskCreatePinnedToCore(parallelTask, "parallelTask", 4096, NULL, 0, &xTimerTask, 0);
+#else
     xTaskCreatePinnedToCore(parallelTask, "parallelTask", 3000, NULL, 0, &xTimerTask, 0);
+#endif
 }
 
 void setup() {
@@ -80,10 +109,18 @@ void setup() {
     ws.init(&config, &timer, &monitor, &buzzer, &led);
 #ifdef C5VRX_LINK
     ws.setRssiSource(&rx);
+    race.init(&config, &timer);
+    ws.setRaceControl(&race);
 #endif
 #ifdef PIN_LED_STRIP
     ledStrip.init(PIN_LED_STRIP);
     ws.setLedStrip(&ledStrip);
+#ifdef C5VRX_LINK
+    race.setLedStrip(&ledStrip);
+#endif
+#endif
+#ifdef ELRS_BACKPACK
+    ws.setElrsBackpack(&elrs);
 #endif
     led.on(400);
     buzzer.beep(200);

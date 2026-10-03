@@ -61,7 +61,19 @@ Record the results here (with dates) as they are measured.
 - [ ] Unplug the RF node: the gate blinks purple within about 3 s.
 - [ ] Repeat the desense check from §3 with the strip lit at the chosen brightness.
 
-## 5. Field
+## 5. ELRS radio start
+
+See [RADIO_START.md](RADIO_START.md) for the radio and backpack setup.
+
+- [ ] In AP mode with *Radio start* on and a bind phrase saved, `/status` shows `ELRS Backpack: listening`.
+  - [ ] If it doesn't, check the serial log for `ELRS:` errors. The STA MAC override (`esp_wifi_set_mac`) in `WIFI_AP_STA` mode and `esp_now_init` are the unproven steps on the C5 core.
+  - [ ] Check whether the log says the STA protocol with `WIFI_PROTOCOL_LR` failed. If it did, record whether frames still arrive with b/g/n only.
+- [ ] Phones and laptops still join the AP, and the web UI works, while ESP-NOW is listening on channel 1.
+- [ ] A short press on the radio button starts the countdown, and a 1 s hold stops it, at gate distance and at the far end of the track.
+- [ ] Count missed presses over 20 presses at the pilot's position.
+- [ ] Repeat the RF node noise-floor check from §3 with ESP-NOW listening.
+
+## 6. Field
 
 - [ ] Tune the enter/exit thresholds and minimum lap time.
 - [ ] Compare lap times against video frame timing. The target is ±100 ms.

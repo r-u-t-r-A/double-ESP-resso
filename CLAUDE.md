@@ -46,7 +46,21 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
 - WS2812B strip on the AP node's D4 (GPIO23), driven by `lib/LEDSTRIP`
   (Adafruit NeoPixel over RMT) from `parallelTask`.
 - The gate is 50 cm in diameter, so about 94 LEDs at 60/m.
-- The start countdown lives in the browser, which calls `/timer/arm` so the gate knows about it.
+- The start countdown runs on the AP node (`lib/RACECONTROL`). The web UI posts `/timer/begin`
+  and reacts to the `raceArm` / `raceStart` / `raceStop` SSE events for voice, tone and display.
+
+## ELRS radio start
+
+- `lib/ELRSBACKPACK` (`-DELRS_BACKPACK`) listens for the ExpressLRS TX backpack's ESP-NOW
+  `MSP_ELRS_BACKPACK_SET_RECORDING_STATE` (0x0305), which the radio's "DVR Rec" AUX switch sends.
+  - Each edge is sent once, with no repeats.
+  - A short press (under 1 s) begins the countdown; holding for 1 s stops or cancels it.
+- The backpack sends to the bind-phrase UID (`md5('-DMY_BINDING_PHRASE="…"')[0:6]`, bit 0
+  cleared) on channel 1. The AP node runs `WIFI_AP_STA` with the SoftAP on channel 1, and
+  sets the STA MAC to that UID.
+- AP mode only; radio start can't work while the timer is joined to a home network in STA mode.
+- The MSP parsing and press classification are plain C in `elrs_msp.h`, covered by `tests/test_elrs_msp.c`.
+- User docs: `docs/RADIO_START.md`.
 
 ## Status (2026-09-28)
 
@@ -63,6 +77,8 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
   - Desense from the 2.4 GHz AP.
   - XIAO battery sense on GPIO6/26, and whether the LED is active-low.
   - The gate LED strip (added after the first hardware-free build).
+  - ELRS radio start: the STA MAC override and ESP-NOW alongside the SoftAP on the C5, and
+    reception of the backpack's LR-enabled frames.
 - The upstream PhobosLT envs (esp32dev, C3, S3) fail to build even on unmodified
   upstream because of library drift. Only `XIAO_C5` is maintained.
 
@@ -87,6 +103,7 @@ cd ap-node && pio run -e XIAO_C5 -t upload && pio run -e XIAO_C5 -t uploadfs
 # host tests
 cc -std=c99 -Wall -Wextra -Werror -I common tests/test_c5link_proto.c -o /tmp/t_proto && /tmp/t_proto
 cc -std=c99 -Wall -Wextra -Werror -I rf-node/main tests/test_rssi_scale.c -lm -o /tmp/t_rssi && /tmp/t_rssi
+cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/ELRSBACKPACK tests/test_elrs_msp.c -o /tmp/t_elrs && /tmp/t_elrs
 ```
 
 ## Conventions
