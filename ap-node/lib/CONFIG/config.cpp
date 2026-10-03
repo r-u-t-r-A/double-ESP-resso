@@ -287,7 +287,7 @@ void Config::setDefaults(void) {
     conf.ledCount = DEFAULT_LED_COUNT;
     conf.ledBrightness = DEFAULT_LED_BRIGHTNESS;
     conf.minLap = 100;
-    conf.alarm = 36;
+    conf.alarm = 0;  // 0.0 V: low-battery alarm off
     conf.announcerType = 2;
     conf.announcerRate = 10;
     conf.enterRssi = 120;
