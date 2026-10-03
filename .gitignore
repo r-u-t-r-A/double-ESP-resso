@@ -3,6 +3,8 @@ rf-node/sdkconfig
 rf-node/sdkconfig.old
 rf-node/managed_components/
 ap-node/.pio/
+ap-node/build/
 /*.csv
 tools/*.csv
 __pycache__/
+*.FCBak
