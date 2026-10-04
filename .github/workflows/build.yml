@@ -14,6 +14,7 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -I common tests/test_c5link_proto.c -o t_proto && ./t_proto
           cc -std=c99 -Wall -Wextra -Werror -I rf-node/main tests/test_rssi_scale.c -lm -o t_rssi && ./t_rssi
           cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/ELRSBACKPACK tests/test_elrs_msp.c -o t_elrs && ./t_elrs
+          cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/LEDSTRIP tests/test_ledstrip_timing.c -o t_led && ./t_led
 
   rf-node:
     runs-on: ubuntu-latest

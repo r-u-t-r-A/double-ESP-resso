@@ -19,6 +19,8 @@ const ledOnInput = document.getElementById("ledOn");
 const ledCountInput = document.getElementById("ledCount");
 const ledBrightInput = document.getElementById("ledBright");
 const ledBrightSpan = document.getElementById("ledBrightSpan");
+const ledTypeSelect = document.getElementById("ledType");
+const ledOrderSelect = document.getElementById("ledOrder");
 var ledStrip = false;
 const elrsOnInput = document.getElementById("elrsOn");
 const elrsPhraseInput = document.getElementById("elrsPhrase");
@@ -109,6 +111,8 @@ onload = function (e) {
         ledCountInput.value = config.ledCount;
         ledBrightInput.value = config.ledBright;
         ledBrightSpan.textContent = config.ledBright;
+        ledTypeSelect.value = config.ledType ?? 0;
+        ledOrderSelect.value = config.ledOrder ?? 0;
         document.querySelectorAll(".ledstrip-only").forEach((el) => (el.style.display = ""));
       }
       raceCtl = config.raceCtl !== undefined;
@@ -304,6 +308,8 @@ function saveConfig() {
             ledOn: ledOnInput.checked ? 1 : 0,
             ledCount: Math.max(0, Math.min(300, parseInt(ledCountInput.value) || 0)),
             ledBright: Math.max(0, Math.min(255, parseInt(ledBrightInput.value) || 0)),
+            ledType: parseInt(ledTypeSelect.value) || 0,
+            ledOrder: parseInt(ledOrderSelect.value) || 0,
           }
         : {}),
       ...(elrsBackpack

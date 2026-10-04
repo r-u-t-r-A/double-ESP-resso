@@ -43,8 +43,12 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
 
 ## Gate LEDs
 
-- WS2812B strip on the AP node's D4 (GPIO23), driven by `lib/LEDSTRIP`
-  (Adafruit NeoPixel over RMT) from `parallelTask`.
+- WS2812B / WS2812 / WS2811 (800 or 400 kHz) strip on the AP node's D4 (GPIO23), driven by
+  `lib/LEDSTRIP` from `parallelTask`. The chip and colour order are set in the web UI (config v4).
+  - Adafruit NeoPixel only renders the pixel buffer. Frames go out through our own RMT encoder
+    (`ledstrip_timing.h`, 100 ns ticks, two memory blocks).
+  - The library's IDF 5 `espShow` ignores 400 kHz, uses WS2812 timing that is out of spec
+    for WS2811, and uses one RMT block (48 symbols on the C5, no DMA), which Wi-Fi interrupts can underrun.
 - The gate is 50 cm in diameter, so about 94 LEDs at 60/m.
 - The start countdown runs on the AP node (`lib/RACECONTROL`). The web UI posts `/timer/begin`
   and reacts to the `raceArm` / `raceStart` / `raceStop` SSE events for voice, tone and display.
@@ -104,6 +108,7 @@ cd ap-node && pio run -e XIAO_C5 -t upload && pio run -e XIAO_C5 -t uploadfs
 cc -std=c99 -Wall -Wextra -Werror -I common tests/test_c5link_proto.c -o /tmp/t_proto && /tmp/t_proto
 cc -std=c99 -Wall -Wextra -Werror -I rf-node/main tests/test_rssi_scale.c -lm -o /tmp/t_rssi && /tmp/t_rssi
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/ELRSBACKPACK tests/test_elrs_msp.c -o /tmp/t_elrs && /tmp/t_elrs
+cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/LEDSTRIP tests/test_ledstrip_timing.c -o /tmp/t_led && /tmp/t_led
 ```
 
 ## Conventions

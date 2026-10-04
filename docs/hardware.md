@@ -79,8 +79,24 @@ One USB-C cable or a battery powers both boards through the 5V link.
 
 ## WS2812B gate LED strip (AP node, D4)
 
-The AP node drives a WS2812B strip around the gate on **D4 (GPIO23)**. D4 is not
-joined to the RF node.
+The AP node drives a single-wire RGB strip around the gate on **D4 (GPIO23)**.
+D4 is not joined to the RF node.
+
+Supported chips, selected in the web UI (Configuration tab, **LED chip** and
+**LED colour order**):
+
+| Chip | Speed | Usual colour order | Notes |
+|------|-------|--------------------|-------|
+| WS2812B | 800 kHz | GRB | The default. 5 V, one LED per chip. |
+| WS2812 | 800 kHz | GRB | Older 6-pin version, slightly different timing. |
+| WS2811 (800 kHz) | 800 kHz | RGB, but varies by strip | Often 12 V strips where one chip drives a group of 3 LEDs. Set **LED count** to the number of chips, not LEDs. |
+| WS2811 (400 kHz) | 400 kHz | RGB | Only for chips wired for low-speed mode. A 300-chip frame then takes 18 ms. |
+
+If the colours are wrong, set the strip to idle (breathing blue) and change
+**LED colour order** until it really is blue.
+
+The diagram below is for a 5 V strip. For a 12 V WS2811 strip, use a 12 V supply
+for the strip and keep the common ground.
 
 ```
 5 V supply (+) ──┬───────────────────── strip +5V
@@ -104,12 +120,16 @@ AP node D4 ── 330 Ω ──────────────────�
 | Racing green at the default cap | about 0.5 A |
 
   Size the supply for the brightness you configure.
-- **Level shifting:** 3.3 V data usually works with a short data wire. If the
-  first LEDs flicker, add a 74AHCT125 level shifter.
+- **Level shifting:** WS2812B and WS2811 need about 0.7 × their supply on the
+  data line, which is 3.5 V at 5 V, so 3.3 V data is just under spec.
+  - It usually works with a short data wire.
+  - If the first LEDs flicker or show wrong colours, add a 74AHCT125 level
+    shifter powered from 5 V.
+  - Use the shifter from the start for 12 V WS2811 strips.
 - **Keep it away from the RF node:** route the strip's supply and its wiring
   away from the RF node. Rerun the desense check (bring-up §3) with the strip lit.
 - **Powering the XIAO stack from the strip supply:** only feed the stack's 5V
   pin from that supply when no USB cable is plugged in.
 
-The LED count, brightness cap and on/off switch are set in the web UI
-(Configuration tab). The colour meanings are listed in `README.md`.
+The LED chip, colour order, LED count, brightness cap and on/off switch are set
+in the web UI (Configuration tab). The colour meanings are listed in `README.md`.

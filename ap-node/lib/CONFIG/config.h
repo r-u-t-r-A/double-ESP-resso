@@ -97,10 +97,10 @@
 #define LED_COUNT_MAX 300
 
 #define EEPROM_RESERVED_SIZE 256
-#define CONFIG_JSON_SIZE 512
+#define CONFIG_JSON_SIZE 640
 #define CONFIG_MAGIC_MASK (0b11U << 30)
 #define CONFIG_MAGIC (0b01U << 30)
-#define CONFIG_VERSION 3U
+#define CONFIG_VERSION 4U
 #define ELRS_MAC_LEN 6
 
 #define EEPROM_CHECK_TIME_MS 1000
@@ -124,6 +124,9 @@ typedef struct {
     // v3: appended so a v2 image keeps every field above.
     uint8_t elrsMac[ELRS_MAC_LEN];  // ELRS backpack UID as sent to (ELRS_BACKPACK builds)
     uint8_t elrsEnabled;
+    // v4: LED chip (ledstrip_chip_e) and wire colour order (ledstrip_order_e).
+    uint8_t ledType;
+    uint8_t ledOrder;
 } laptimer_config_t;
 
 class Config {
@@ -146,6 +149,8 @@ class Config {
     bool getLedEnabled();
     uint16_t getLedCount();
     uint8_t getLedBrightness();
+    uint8_t getLedType();
+    uint8_t getLedOrder();
     uint8_t getAnnouncerRate();
     bool getElrsEnabled();
     const uint8_t* getElrsMac();

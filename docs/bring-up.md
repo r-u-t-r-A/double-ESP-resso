@@ -54,6 +54,8 @@ Record the results here (with dates) as they are measured.
 
 - [ ] Power the strip from its own 5 V supply. The idle state shows breathing blue.
 - [ ] Set the LED count in the web UI. The whole ring lights, with no stale pixels past the end.
+- [ ] Select the strip's **LED chip** and **colour order**. Idle shows pure blue, and the countdown shows pure red.
+- [ ] With a phone streaming the Calibration tab (heavy Wi-Fi traffic), the ring shows no flicker or wrong-colour pixels toward its far end. That would mean RMT underruns.
 - [ ] Press *Start Race*: the gate pulses red during the countdown and flashes green at the tone.
 - [ ] Carry a VTX through the gate:
   - [ ] Idle: the meter fills.
