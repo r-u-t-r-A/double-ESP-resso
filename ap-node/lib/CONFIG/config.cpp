@@ -6,6 +6,9 @@
 #ifdef ELRS_BACKPACK
 #include "elrs_backpack.h"
 #endif
+#ifdef PIN_LED_STRIP
+#include "ledstrip_timing.h"
+#endif
 
 void Config::init(void) {
     if (sizeof(laptimer_config_t) > EEPROM_RESERVED_SIZE) {
@@ -30,14 +33,20 @@ void Config::load(void) {
         version = conf.version & ~CONFIG_MAGIC_MASK;
     }
 
-    // v2 -> v3 only appended the ELRS fields.
+    // v2 -> v3 appended the ELRS fields, v3 -> v4 the LED chip and order.
     if (version == 2U) {
         memset(conf.elrsMac, 0, sizeof(conf.elrsMac));
         conf.elrsEnabled = 0;
-        conf.version = CONFIG_VERSION | CONFIG_MAGIC;
-        version = CONFIG_VERSION;
+        version = 3U;
         modified = true;
     }
+    if (version == 3U) {
+        conf.ledType = 0;   // WS2812B
+        conf.ledOrder = 0;  // GRB
+        version = 4U;
+        modified = true;
+    }
+    if (version == CONFIG_VERSION) conf.version = CONFIG_VERSION | CONFIG_MAGIC;
 
     // If version is not current, reset to defaults
     if (version != CONFIG_VERSION) {
@@ -78,6 +87,8 @@ void Config::toJson(AsyncResponseStream& destination) {
     config["ledOn"] = conf.ledEnabled;
     config["ledCount"] = conf.ledCount;
     config["ledBright"] = conf.ledBrightness;
+    config["ledType"] = conf.ledType;
+    config["ledOrder"] = conf.ledOrder;
 #endif
 #ifdef C5VRX_LINK
     config["raceCtl"] = 1;
@@ -110,6 +121,8 @@ void Config::toJsonString(char* buf) {
     config["ledOn"] = conf.ledEnabled;
     config["ledCount"] = conf.ledCount;
     config["ledBright"] = conf.ledBrightness;
+    config["ledType"] = conf.ledType;
+    config["ledOrder"] = conf.ledOrder;
 #endif
 #ifdef ELRS_BACKPACK
     char mac[18];
@@ -182,6 +195,22 @@ void Config::fromJson(JsonObject source) {
             modified = true;
         }
     }
+#ifdef PIN_LED_STRIP
+    if (source["ledType"].is<int>()) {
+        int t = source["ledType"];
+        if (t >= 0 && t < LEDSTRIP_CHIP_COUNT && t != conf.ledType) {
+            conf.ledType = t;
+            modified = true;
+        }
+    }
+    if (source["ledOrder"].is<int>()) {
+        int o = source["ledOrder"];
+        if (o >= 0 && o < LEDSTRIP_ORDER_COUNT && o != conf.ledOrder) {
+            conf.ledOrder = o;
+            modified = true;
+        }
+    }
+#endif
     if (source["rfGain"].is<int>()) {
         int gain = source["rfGain"];
         if (gain >= 0 && gain <= 89 && gain != conf.rfGain) {
@@ -266,6 +295,14 @@ uint16_t Config::getLedCount() {
 
 uint8_t Config::getLedBrightness() {
     return conf.ledBrightness;
+}
+
+uint8_t Config::getLedType() {
+    return conf.ledType;
+}
+
+uint8_t Config::getLedOrder() {
+    return conf.ledOrder;
 }
 
 char* Config::getSsid() {

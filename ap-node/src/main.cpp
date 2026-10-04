@@ -37,7 +37,7 @@ static void handleRadioButton(uint32_t currentTimeMs) {
 static LedStrip ledStrip;
 
 static void handleGateLights(uint32_t currentTimeMs) {
-    ledStrip.configure(config.getLedEnabled(), config.getLedCount(), config.getLedBrightness());
+    ledStrip.configure(config.getLedEnabled(), config.getLedCount(), config.getLedBrightness(), config.getLedType(), config.getLedOrder());
     ledstrip_inputs_t in = {};
     in.running = timer.isRunning();
     in.lapSerial = timer.getLapSerial();

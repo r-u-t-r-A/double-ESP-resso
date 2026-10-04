@@ -113,6 +113,28 @@
           </div>
 
           <div class="config-item ledstrip-only" style="display: none">
+            <label for="ledType">LED chip:</label>
+            <select id="ledType">
+              <option value="0">WS2812B</option>
+              <option value="1">WS2812</option>
+              <option value="2">WS2811 (800 kHz)</option>
+              <option value="3">WS2811 (400 kHz)</option>
+            </select>
+          </div>
+
+          <div class="config-item ledstrip-only" style="display: none">
+            <label for="ledOrder">LED colour order:</label>
+            <select id="ledOrder">
+              <option value="0">GRB (WS2812B/WS2812)</option>
+              <option value="1">RGB (most WS2811)</option>
+              <option value="2">BRG</option>
+              <option value="3">RBG</option>
+              <option value="4">GBR</option>
+              <option value="5">BGR</option>
+            </select>
+          </div>
+
+          <div class="config-item ledstrip-only" style="display: none">
             <label for="ledCount">LED count:</label>
             <input type="number" min="0" max="300" step="1" id="ledCount" value="60" />
           </div>

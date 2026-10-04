@@ -4,27 +4,76 @@
 
 static const uint32_t COLOR_OFF = 0;
 
-void LedStrip::init(uint8_t pin) {
-    strip.setPin(pin);
+// Adafruit buffer layout for each ledstrip_order_e.
+static const neoPixelType NEO_ORDERS[LEDSTRIP_ORDER_COUNT] = {NEO_GRB, NEO_RGB, NEO_BRG, NEO_RBG, NEO_GBR, NEO_BGR};
+
+void LedStrip::init(uint8_t p) {
+    pin = p;
+    // Adafruit only renders into its buffer here; it never drives the pin.
     strip.updateType(NEO_GRB + NEO_KHZ800);
     strip.updateLength(0);
-    strip.begin();
-    ready = true;
+    // Two RMT memory blocks halve the refill interrupt rate during a frame.
+    ready = rmtInit(pin, RMT_TX_MODE, RMT_MEM_NUM_BLOCKS_2, 1000000000u / LEDSTRIP_TICK_NS) ||
+            rmtInit(pin, RMT_TX_MODE, RMT_MEM_NUM_BLOCKS_1, 1000000000u / LEDSTRIP_TICK_NS);
+    if (!ready) DEBUG("LED strip: RMT init on GPIO%u failed\n", pin);
 }
 
-void LedStrip::configure(bool en, uint16_t n, uint8_t bright) {
+void LedStrip::configure(bool en, uint16_t n, uint8_t bright, uint8_t chipType, uint8_t colorOrder) {
     if (n > LEDSTRIP_MAX_LEDS) n = LEDSTRIP_MAX_LEDS;
     if (!en) n = count;  // keep the length so the strip can be blanked
+    if (chipType >= LEDSTRIP_CHIP_COUNT) chipType = LEDSTRIP_WS2812B;
+    colorOrder = ledstrip_order_index(colorOrder);
+    if (colorOrder != order) {
+        order = colorOrder;
+        strip.updateType(NEO_ORDERS[order] + NEO_KHZ800);
+        DEBUG("LED strip: colour order %u\n", order);
+    }
+    if (chipType != chip) {
+        chip = chipType;
+        DEBUG("LED strip: chip %u\n", chip);
+    }
     if (n != count) {
         // Blank the old length first so shortening leaves no stale pixels.
         strip.clear();
-        strip.show();
+        show();
         strip.updateLength(n);
         count = n;
         DEBUG("LED strip: %u LEDs\n", count);
     }
     brightness = bright;
     enabled = en;
+}
+
+void LedStrip::show() {
+    if (!ready || count == 0) return;
+    const uint8_t *pixels = strip.getPixels();
+    uint32_t bits = (uint32_t)count * 3u * 8u;
+    if (bits > symbolCapacity) {
+        rmt_data_t *grown = (rmt_data_t *)realloc(symbols, bits * sizeof(rmt_data_t));
+        if (!grown) {
+            DEBUG("LED strip: out of memory for %u LEDs\n", count);
+            return;
+        }
+        symbols = grown;
+        symbolCapacity = bits;
+    }
+    const ledstrip_timing_t *t = ledstrip_timing(chip);
+    uint32_t i = 0;
+    for (uint32_t b = 0; b < (uint32_t)count * 3u; ++b) {
+        for (uint8_t mask = 0x80; mask; mask >>= 1) {
+            bool one = pixels[b] & mask;
+            symbols[i].level0 = 1;
+            symbols[i].duration0 = one ? t->t1h : t->t0h;
+            symbols[i].level1 = 0;
+            symbols[i].duration1 = one ? t->t1l : t->t0l;
+            ++i;
+        }
+    }
+    // Back-to-back frames would be latched as one long frame.
+    uint32_t since = micros() - lastShowUs;
+    if (since < LEDSTRIP_RESET_US) delayMicroseconds(LEDSTRIP_RESET_US - since);
+    rmtWrite(pin, symbols, bits, RMT_WAIT_FOR_EVER);
+    lastShowUs = micros();
 }
 
 void LedStrip::arm(uint32_t currentTimeMs) {
@@ -110,7 +159,7 @@ void LedStrip::handleLedStrip(uint32_t now, const ledstrip_inputs_t &in) {
     if (!enabled || count == 0) {
         if (!wasDark) {
             strip.clear();
-            strip.show();
+            show();
             wasDark = true;
         }
         return;
@@ -141,5 +190,5 @@ void LedStrip::handleLedStrip(uint32_t now, const ledstrip_inputs_t &in) {
         fill(Adafruit_NeoPixel::Color(255, 120, 0));
     }
 
-    strip.show();
+    show();
 }
