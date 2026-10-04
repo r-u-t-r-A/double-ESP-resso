@@ -70,9 +70,20 @@ strapping pins, so a full pin-to-pin stack is not safe. See
 | `tools/rssi_log.py` | Records and plots RF node RSSI over USB, for calibration. |
 | `tests/` | Host unit tests for the protocol and the RSSI scaling. |
 
+## Documentation
+
+| Document | Contents |
+| --- | --- |
+| [docs/FLASHING.md](docs/FLASHING.md) | Step-by-step flashing of both boards |
+| [docs/hardware.md](docs/hardware.md) | Wiring, board stacking and the gate LED strip |
+| [docs/protocol.md](docs/protocol.md) | RF node ↔ AP node UART protocol |
+| [docs/bring-up.md](docs/bring-up.md) | Hardware bring-up checklist and results |
+| [docs/VOICE.md](docs/VOICE.md) | Getting voice announcements working in the browser |
+| [docs/RADIO_START.md](docs/RADIO_START.md) | Starting and stopping races from an ExpressLRS radio |
+
 ## Build and flash
 
-Step-by-step flashing instructions for both boards are in **[FLASHING.md](FLASHING.md)**. The commands below are a short version.
+Step-by-step flashing instructions for both boards are in **[docs/FLASHING.md](docs/FLASHING.md)**. The commands below are a short version.
 
 Plug in **one board at a time**; the other board is powered through the 5V link.
 

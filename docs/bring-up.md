@@ -19,7 +19,7 @@ Record the results here (with dates) as they are measured.
   samples/s and no drops after startup.
 - **RSSI:** reads 0 with no transmitter on the channel. It responds with a VTX
   on the channel and more gain ("works somewhat"). It is not calibrated yet.
-- **Open issue:** the RF node's USB console stays silent (see `FLASHING.md`).
+- **Open issue:** the RF node's USB console stays silent (see [FLASHING.md](FLASHING.md)).
 
 ## 1. RF node alone (USB)
 
