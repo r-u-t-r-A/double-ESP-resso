@@ -60,3 +60,46 @@ F,5843*60
 - Peak times are taken from the AP node's `millis()` when a sample is
   processed. UART transport and batching add a nearly constant 1–2 ms, which
   cancels out of lap times because each lap is measured peak to peak.
+
+## Desktop stream (AP node → laptop, Wi-Fi)
+
+The AP node serves the 1 kHz samples the lap timer actually used as a
+server-sent event stream at `GET /rssi`. It is a separate event source from the
+web UI's `/events`, so browsers don't receive it. Batching and encoding are in
+[`ap-node/lib/RSSISTREAM/rssi_stream.h`](../ap-node/lib/RSSISTREAM/rssi_stream.h),
+tested by [`tests/test_rssi_stream.c`](../tests/test_rssi_stream.c).
+
+- **Batching:** samples are collected only while a client is connected, and
+  sent as one `b` event every 50 ms, about 50 samples each. That is about 6 kB/s.
+- **First batch:** a new client starts with fresh samples, not a backlog.
+
+| Event | Data | Meaning |
+|-------|------|---------|
+| `b` | `<idx0>,<ms0>,<raw hex>,<filt hex>,<dms>` | A batch of samples. |
+| `mark` | `start,<race start ms>` | The race started. Lap 1 is timed from here. |
+| `mark` | `stop,<ms>` | The race stopped. On connect, the current state is sent as `start` or `stop`. |
+| `mark` | `lap,<lap ms>` | A lap was detected. The same value as the `/events` `lap` event. |
+
+Fields of `b`:
+
+- **`idx0`:** the running sample index of the first sample, a `uint32_t` that
+  wraps. Consecutive batches continue the index, so a jump means samples were lost.
+  - Loss happens when the SSE queue is full (Wi-Fi congestion), or when the web
+    task stalls for more than about 0.45 s.
+- **`ms0`:** the AP node's `millis()` for the first sample. It is the same clock
+  as the lap timer's peak times.
+- **`raw hex`:** 2 upper-case hex characters per sample. This is the RSSI as
+  received from the RF node.
+- **`filt hex`:** 2 upper-case hex characters per sample. This is the
+  Kalman-filtered, rounded RSSI that `LapTimer` compares with enter/exit.
+- **`dms`:** one decimal digit per sample, the ms since the previous sample
+  (`0` for the first), clamped to 9. A sample's time is `ms0` plus the running sum.
+
+Example (3 samples):
+
+```
+event: b
+data: 81234,1052310,8A8C8F,868687,001
+```
+
+Try it with `curl -N http://20.0.0.1/rssi`.

@@ -16,6 +16,7 @@
 #define WIFI_CONNECTION_TIMEOUT_MS 30000
 #define WIFI_RECONNECT_TIMEOUT_MS 500
 #define WEB_RSSI_SEND_TIMEOUT_MS 200
+#define WEB_RSSI_STREAM_PERIOD_MS 50  // desktop /rssi batch interval
 #define WIFI_AP_CHANNEL 1  // the ELRS backpack's fixed ESP-NOW channel
 
 class Webserver {
@@ -24,6 +25,9 @@ class Webserver {
     void handleWebUpdate(uint32_t currentTimeMs);
 #ifdef C5VRX_LINK
     void setRssiSource(RssiSource *source) { rssiSource = source; }
+    // Queues one 1 kHz lap-timer sample for the desktop /rssi stream.
+    // Called from the lap timer loop, not from the web task.
+    void pushRssiSample(uint32_t ms, uint8_t raw, uint8_t filt);
 #endif
 #ifdef PIN_LED_STRIP
     void setLedStrip(LedStrip *s) { ledStrip = s; }
@@ -39,6 +43,9 @@ class Webserver {
     void startServices();
     void sendRssiEvent(uint8_t rssi);
     void sendLaptimeEvent(uint32_t lapTime);
+#ifdef C5VRX_LINK
+    void handleRssiStream(uint32_t currentTimeMs);
+#endif
 
     Config *conf;
     LapTimer *timer;
@@ -67,4 +74,9 @@ class Webserver {
 
     bool sendRssi = false;
     uint32_t rssiSentMs = 0;
+#ifdef C5VRX_LINK
+    uint32_t rssiStreamMs = 0;
+    bool rssiStreamClients = false;
+    bool raceWasRunning = false;
+#endif
 };

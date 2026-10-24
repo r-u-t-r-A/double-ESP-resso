@@ -53,6 +53,17 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
 - The start countdown runs on the AP node (`lib/RACECONTROL`). The web UI posts `/timer/begin`
   and reacts to the `raceArm` / `raceStart` / `raceStop` SSE events for voice, tone and display.
 
+## Desktop app stream
+
+- `GET /rssi` (SSE, `#ifdef C5VRX_LINK`) streams every 1 kHz lap-timer sample, raw and
+  filtered, in 50 ms batches, plus race/lap marks. It is for a Python desktop app
+  (logging, replay, calibration). See `docs/protocol.md`.
+- `loop()` pushes into a lock-free SPSC ring (`lib/RSSISTREAM/rssi_stream.h`, plain C,
+  tested by `tests/test_rssi_stream.c`), and `parallelTask` drains it only while a client
+  is connected.
+- Unproven: throughput on hardware, and whether the extra 2.4 GHz traffic raises the
+  noise floor.
+
 ## ELRS radio start
 
 - `lib/ELRSBACKPACK` (`-DELRS_BACKPACK`) listens for the ExpressLRS TX backpack's ESP-NOW
@@ -109,6 +120,7 @@ cc -std=c99 -Wall -Wextra -Werror -I common tests/test_c5link_proto.c -o /tmp/t_
 cc -std=c99 -Wall -Wextra -Werror -I rf-node/main tests/test_rssi_scale.c -lm -o /tmp/t_rssi && /tmp/t_rssi
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/ELRSBACKPACK tests/test_elrs_msp.c -o /tmp/t_elrs && /tmp/t_elrs
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/LEDSTRIP tests/test_ledstrip_timing.c -o /tmp/t_led && /tmp/t_led
+cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/RSSISTREAM tests/test_rssi_stream.c -o /tmp/t_stream && /tmp/t_stream
 ```
 
 ## Conventions

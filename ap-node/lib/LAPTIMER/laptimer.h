@@ -32,6 +32,9 @@ class LapTimer {
     bool isLapAvailable();
     bool isRunning() { return state == RUNNING; }
     uint32_t getLapSerial() { return lapSerial; }
+#ifdef C5VRX_LINK
+    uint32_t getRaceStartMs() { return raceStartTimeMs; }
+#endif
 
    private:
     laptimer_state_e state = STOPPED;

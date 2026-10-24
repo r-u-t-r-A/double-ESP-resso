@@ -7,6 +7,9 @@
 #include <esp_wifi.h>
 
 #include "debug.h"
+#ifdef C5VRX_LINK
+#include "rssi_stream.h"
+#endif
 
 static const uint8_t DNS_PORT = 53;
 static IPAddress netMsk(255, 255, 255, 0);
@@ -14,6 +17,12 @@ static DNSServer dnsServer;
 static IPAddress ipAddress;
 static AsyncWebServer server(80);
 static AsyncEventSource events("/events");
+#ifdef C5VRX_LINK
+// 1 kHz raw + filtered RSSI for the desktop app (docs/protocol.md). A source of
+// its own so browsers on /events don't receive it.
+static AsyncEventSource rssiEvents("/rssi");
+static rssi_stream_t rssiStream;
+#endif
 
 static const char *wifi_hostname = "plt";
 static const char *wifi_ap_ssid_prefix = "PhobosLT";
@@ -72,7 +81,55 @@ void Webserver::sendLaptimeEvent(uint32_t lapTime) {
     char buf[16];
     snprintf(buf, sizeof(buf), "%u", lapTime);
     events.send(buf, "lap");
+#ifdef C5VRX_LINK
+    if (rssiStreamClients) {
+        char mark[24];
+        snprintf(mark, sizeof(mark), "lap,%u", lapTime);
+        rssiEvents.send(mark, "mark");
+    }
+#endif
 }
+
+#ifdef C5VRX_LINK
+void Webserver::pushRssiSample(uint32_t ms, uint8_t raw, uint8_t filt) {
+    rssi_stream_push(&rssiStream, ms, raw, filt);
+}
+
+void Webserver::handleRssiStream(uint32_t currentTimeMs) {
+    if (!servicesStarted || (currentTimeMs - rssiStreamMs) < WEB_RSSI_STREAM_PERIOD_MS) return;
+    rssiStreamMs = currentTimeMs;
+
+    bool clients = rssiEvents.count() > 0;
+    if (!clients) {
+        rssi_stream_flush(&rssiStream);  // a new client starts with fresh samples
+        rssiStreamClients = false;
+        return;
+    }
+    if (!rssiStreamClients) {
+        rssi_stream_flush(&rssiStream);
+        raceWasRunning = !timer->isRunning();  // announce the current race state
+        rssiStreamClients = true;
+    }
+
+    bool running = timer->isRunning();
+    if (running != raceWasRunning) {
+        char mark[32];
+        if (running) {
+            snprintf(mark, sizeof(mark), "start,%u", timer->getRaceStartMs());
+        } else {
+            snprintf(mark, sizeof(mark), "stop,%u", currentTimeMs);
+        }
+        rssiEvents.send(mark, "mark");
+        raceWasRunning = running;
+    }
+
+    // Normally one batch of ~50; catch up after a stall, a few batches at a time.
+    static char text[RSSI_STREAM_TEXT_MAX];
+    for (int i = 0; i < 4 && rssi_stream_encode(&rssiStream, text); ++i) {
+        rssiEvents.send(text, "b");
+    }
+}
+#endif
 
 #ifdef C5VRX_LINK
 static void sendRaceEvent(const char *event, uint32_t value) {
@@ -96,6 +153,9 @@ void Webserver::handleWebUpdate(uint32_t currentTimeMs) {
         sendRssiEvent(timer->getRssi());
         rssiSentMs = currentTimeMs;
     }
+#ifdef C5VRX_LINK
+    handleRssiStream(currentTimeMs);
+#endif
 
     wl_status_t status = WiFi.status();
 
@@ -433,6 +493,9 @@ Battery Voltage:\t%0.1fv";
     server.onNotFound(handleNotFound);
 
     server.addHandler(&events);
+#ifdef C5VRX_LINK
+    server.addHandler(&rssiEvents);
+#endif
     server.addHandler(configJsonHandler);
 
     ElegantOTA.setAutoReboot(true);

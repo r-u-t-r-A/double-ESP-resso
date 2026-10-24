@@ -132,7 +132,9 @@ void loop() {
 #ifdef C5VRX_LINK
     // One lap timer update per 1 kHz RF node sample, not per loop pass.
     while (rx.poll()) {
-        timer.handleLapTimerUpdate(millis());
+        uint32_t currentTimeMs = millis();
+        timer.handleLapTimerUpdate(currentTimeMs);
+        ws.pushRssiSample(currentTimeMs, rx.readRssi(), timer.getRssi());
     }
     ElegantOTA.loop();
     delay(1);
