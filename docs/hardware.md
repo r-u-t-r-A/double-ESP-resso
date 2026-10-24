@@ -15,7 +15,6 @@ The RF node:
 
 | Pins | Use |
 |------|-----|
-| D0, D1, D2, D3, D10 and GPIO 3/4/5 (not on the header) | **MODEM_DIAG Q4/I4 outputs**, toggling at 40–80 MHz |
 | D5 (GPIO24) | UART TX to the AP node |
 | D9 (GPIO9) | UART RX from the AP node |
 
@@ -32,13 +31,13 @@ The AP node:
 ## Stacking rule: join 5V, GND, D5 and D9 only
 
 When XIAO boards are stacked, each pin meets the same pin on the other board.
-Joining **all** pins is not safe, for two reasons:
+Joining **all** pins is not safe:
 
-- The RF node's IQ bus on D0–D3 and D10 would be loaded by the AP node's pins
-  and would radiate over a longer trace.
-- D2 (GPIO25) and D3 (GPIO7) are ESP32-C5 strapping pins. If the AP node
-  resets while the RF node is driving them, the AP node can boot in the wrong
-  mode.
+- D2 (GPIO25) and D3 (GPIO7) are ESP32-C5 strapping pins. If one board
+  drives them while the other resets, that board can boot in the wrong mode.
+- Up to firmware 1 the RF node drove a 40–80 MHz IQ bus on D0–D3 and D10.
+  The current RF node reads I/Q from on-chip SRAM and drives no other pins,
+  but an older RF node build must not be stacked on a full header.
 
 **Do not use D6/D7 for the link.** GPIO11/12 are the ESP32-C5 UART0 console
 pins. Both chips' ROM boot logs, and the AP node's whole Arduino console, are

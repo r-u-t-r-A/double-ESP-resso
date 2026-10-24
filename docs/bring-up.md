@@ -23,24 +23,48 @@ Record the results here (with dates) as they are measured.
 
 ## 1. RF node alone (USB)
 
-- [ ] Flash the RF node. The boot log shows `RF ready: <MHz> MHz, gain <g>` and `RF node v1 running`.
-- [ ] Type `s` and check the reply `STATUS,<mhz>,<gain>,OK,1`.
-- [ ] Tune each channel with a VTX powered on nearby. Each must reply `OK` and the RSSI must rise with the VTX on:
+Firmware 2 (2026-10-24) replaced the 4-bit MODEM_DIAG/PARLIO capture with
+raw 10-bit I/Q captures and a band-power meter (FPVGate C5MK's method; see the
+README). None of this has run on our hardware yet. The expected values below
+are C5MK's own XIAO ESP32-C5 measurements (chip v1.0, ESP-IDF 5.5.1, gain 30);
+we build on ESP-IDF 6.0.2, whose PHY library may differ.
+
+- [ ] Flash the RF node. The boot log shows `boot check: live`,
+  `RF ready: 5658 MHz (LO 5648), gain <g> of <max>` and `RF node v2 running`.
+- [ ] `d` shows `check=live` (or `live_rx_on`), `gainmax` about 89, and on the
+  `DUMP` line `direct` climbing at about 1000/s with `timeouts`, `short` and
+  `long` at 0. `gain_reforced` should stay at 0.
+  - `check=flat`: the PHY isn't receiving. Stop here.
+  - `timeouts` or `short` climbing: the direct trigger doesn't match this
+    IDF's engine. Every capture then falls back to the slow stock path.
+- [ ] Type `s` and check the reply `STATUS,<mhz>,<gain>,OK,2`.
+- [ ] **Spectrum orientation:** with a VTX on R1 and `f 5658`, `m` prints
+  `MIRROR,5658,<pilot_db>,<mirror_db>`. The pilot should be 15–35 dB above
+  the mirror. If the mirror is the higher one, flip `BP_SPECTRUM_SIGN` in
+  `rf-node/main/band_power.h`.
+- [ ] Noise floor with no VTX: `tools/rssi_log.py … --seconds 20`. C5MK saw
+  -1.7 to -1.9 dB of band power (`filt_db`), so RSSI around 18, with a
+  filtered spread of about 0.1 dB. `gain_bad` must stay at 0.
+- [ ] Tune each channel with a VTX on. Each must reply `OK`, and RSSI must
+  rise with the VTX on and return to the floor from the first sample after
+  it goes off:
   - [ ] `f 5658` (R1)
   - [ ] `f 5732` (R3)
   - [ ] `f 5843` (R6)
   - [ ] `f 5880` (R7)
-- [ ] `f 5917` (R8) must reply `ERR_FREQ`.
-- [ ] Measure the noise floor with no VTX: `tools/rssi_log.py … --seconds 20`. Record the RSSI mean and spread.
-- [ ] Take gate-pass traces at several gains (for example 20 / 30 / 40 / 50). Pick the default gain where:
-  - the pass peak stays below 255 and clipping stays low;
+  - [ ] `f 5917` (R8, newly reachable)
+- [ ] `f 5925` (E7) must reply `ERR_FREQ`.
+- [ ] Take gate-pass traces at several gains (for example 20 / 25 / 30 / 35).
+  Pick the default gain where:
+  - the pass peak stays below 255 and `clip_permille` stays near 0;
   - the far-away level is well above the noise floor.
-- [ ] Adjacent channel: with the node on R3 and a second VTX on R1 or R4 at the gate, the R3 RSSI must not reach the enter threshold.
-- [ ] If a finite PARLIO receive fails or times out (`iq_power_measure` errors), switch to C5VRX's infinite-ring capture instead: `get_completed_rx_sample_window()` in C5VRX `main/video.c`.
+- [ ] Adjacent channel: with the node on R3 and a second VTX on R1 or R4 at the
+  gate, the R3 RSSI must not reach the enter threshold. Image rejection is
+  only about 18 dB, so also try a VTX 20 MHz *below* the pilot (its mirror).
 
 ## 2. UART link (both boards stacked)
 
-- [ ] The AP `/status` page shows `RF Node: OK 5658 MHz gain 40 …`.
+- [ ] The AP `/status` page shows `RF Node: OK 5658 MHz gain <g> fw 2 …`.
 - [ ] Change the channel in the web UI and save. The RF node retunes, which `/status` confirms.
 - [ ] Reset only the RF node. The AP node reapplies the frequency and gain within about 1 s.
 - [ ] With the Calibration tab open for 60 s, the `dropped` count stays at 0.

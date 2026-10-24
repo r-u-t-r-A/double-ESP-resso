@@ -1,199 +1,121 @@
 /*
  * rf_frontend.c - ESP32-C5 receive-only 5.8 GHz frontend for the RF node.
  *
- * Derived from C5VRX main/rf.c (https://github.com/Twotoz/C5VRX, GPL-3.0).
- * Register addresses, the MODEM_DIAG lane map and the bring-up order are
- * copied unchanged from that hardware-proven receiver; see its docs for the
- * evidence behind them.
+ * Follows FPVGate C5MK's published description (docs/RADIO_INTERNALS.md
+ * sections 6-8, https://github.com/LouisHitchcock/FPVGateC5MK). No C5MK
+ * code is used. The calls and phy_param offsets were rechecked against our
+ * own disassembly of ESP-IDF v6.0.2's libphy.a / librftest.a (Apache-2.0):
+ *
+ *  - phy_set_chanfreq(mhz, mode) calibrates the band through
+ *    phy_chip_set_chan(); mode 1 is the wide analog bandwidth.
+ *  - phy_set_rf_freq_offset(xtal, mhz, trim) retunes only the PLL. Espressif's
+ *    own channel code (phy_chip_set_chan, phy_set_channel_rfpll_freq_new)
+ *    passes xtal = phy_param byte 49 and trim = the int16 at byte 30.
+ *  - force_rx_gain(1, idx, 0) writes the index to bits 24-31 of 0x600A702C
+ *    and the force flag to bit 23. A nonzero third argument takes a
+ *    Bluetooth path.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "rf_frontend.h"
 
-#include <stdio.h>
+#include <string.h>
 
-#include "driver/gpio.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
-#include "esp_rom_gpio.h"
 #include "esp_wifi.h"
-#include "heap_memory_layout.h"
-#include "soc/gpio_sig_map.h"
 
+#include "band_power.h"
+#include "iq_dump.h"
 #include "node.h"
 
-#define REG32(a)         (*(volatile uint32_t *)(uintptr_t)(a))
+#define REG32(a)          (*(volatile uint32_t *)(uintptr_t)(a))
 
-/* MAC TX queue hardware registers (ESP32-C5, IDF 6.0.x). */
-#define MAC_TXQ0_CONF    0x600a4d6cu
-#define MAC_TXQ_STRIDE   0x10u
-#define MAC_TXQ_ENABLE   0x80000000u
-#define MAC_TXQ_COUNT    5u
+#define AGC_FORCE_REG     0x600A702Cu
+#define AGC_FORCE_EN      (1u << 23)
+#define AGC_FORCE_SHIFT   24
+#define AGC_GAIN_MAX_SHIFT 8
+#define AGC_GAIN_MAX_MASK 0x7Fu
 
-/* Continuous modem front-end un-gating registers. */
-#define DUMP_CTRL       0x600a9004u
-#define DUMP_PTR_MODE   0x600a9008u
-#define DUMP_FORMAT     0x600a9018u
-#define FE_PATH         0x600a20b4u
-#define FE_ENABLE       0x600a0800u
-#define SOURCE_CTRL     0x600a08ccu
-#define SOURCE_MUX      0x600a70b8u
-#define MODEM_CLOCK     0x600a9c04u
-#define CTRL_ENABLE     0x80000000u
-#define CTRL_DUMP_FIRST 0x00020000u
-#define TX_START_SELECT 0x00060000u
-#define SELECTOR_MASK   0x01fe0000u
-#define HP_SRAM_USAGE   0x60095004u
+#define BAND_SETUP_MHZ    5180u
+#define BAND_WIDE         1u
 
-/* The MAC dump engine, armed below in pre-trigger circular mode, keeps
- * writing its 16384-word capture into HP SRAM at DUMP_SRAM_BASE (the 64 KiB
- * MAC_DUMP_ALLOC offset; C5VRX's phase-tap probe reads it there). It is a
- * diagnostic writer we never read, but it overwrites whatever lives there.
- * Without this reservation the heap (task stacks, USB console state, Wi-Fi
- * buffers) sat in that window: the node kept measuring but the USB console
- * went deaf and NVS pages were corrupted. Keep the heap out of it. */
-#define DUMP_SRAM_BASE  0x40830000u
-#define DUMP_SRAM_END   0x40840000u
-SOC_RESERVE_MEMORY_REGION(DUMP_SRAM_BASE, DUMP_SRAM_END, mac_dump_sram);
+#define PHY_PARAM_TRIM    30 /* int16 */
+#define PHY_PARAM_XTAL    49 /* uint8 */
 
-/* Bootstrap channel used by C5VRX: 173 = 5865 MHz. */
-#define RF_BOOT_CHANNEL 173u
+#define CHECK_SAMPLES     1024u
 
-/* MODEM_DIAG lane mapping: Q[9:6] on DIAG[6:9], I[9:6] on DIAG[16:19].
- * Must match the PARLIO RX data_gpio_nums[] order in iq_power.c. */
-static const gpio_num_t s_iq_pins[8] = {
-    GPIO_NUM_1, GPIO_NUM_0, GPIO_NUM_25, GPIO_NUM_7,   /* Q[9:6] */
-    GPIO_NUM_10, GPIO_NUM_5, GPIO_NUM_3, GPIO_NUM_4,   /* I[9:6] */
-};
-static const uint8_t s_iq_diag[8] = {
-    6u, 7u, 8u, 9u,
-    16u, 17u, 18u, 19u,
-};
-
-/* Closed ESP32-C5 PHY / pp library symbols, as used by C5VRX. */
-extern int lmac_stop_hw_txq(void);
-extern void phy_disable_agc(void);
-extern void phy_rfagc_disable(void);
-extern void phy_wifi_fbw_sel(uint32_t val);
-extern void phy_force_rx_gain(bool enable, uint8_t gain_idx);
-extern void phy_set_freq(uint16_t freq_mhz, int offset);
+/* Closed ESP32-C5 PHY / RF test library symbols (esp_phy, Apache-2.0). */
+extern uint8_t phy_param[];
+extern int phy_set_chanfreq(uint32_t mhz, uint32_t bw_mode);
+extern void phy_set_rf_freq_offset(uint32_t xtal, uint32_t mhz, int32_t trim);
+extern void force_rx_gain(uint32_t enable, uint32_t gain_idx, uint32_t bt);
+extern void phy_pbus_workmode(void);
+extern void phy_pbus_xpd_tx_off(void);
+extern void phy_pbus_xpd_rx_on(uint32_t on);
+extern void phy_set_rxclk_en(uint32_t on);
 
 static const char *TAG = "rf";
 static uint16_t s_mhz;
-static uint8_t s_gain = 40u;
-
-typedef struct {
-    uint8_t channel;
-    uint16_t mhz;
-} wifi5_center_t;
-
-/* Public 5 GHz centers used as the supported bootstrap before any
- * undocumented phy_set_freq() step (same table as C5VRX). */
-static const wifi5_center_t s_wifi5_centers[] = {
-    {132, 5660}, {136, 5680}, {140, 5700}, {144, 5720},
-    {149, 5745}, {153, 5765}, {157, 5785}, {161, 5805},
-    {165, 5825}, {169, 5845}, {173, 5865}, {177, 5885},
-};
-
-static const wifi5_center_t *nearest_center(uint16_t mhz)
-{
-    const wifi5_center_t *best = &s_wifi5_centers[0];
-    int best_delta = 0x7fffffff;
-    for (size_t i = 0; i < sizeof(s_wifi5_centers) / sizeof(s_wifi5_centers[0]); ++i) {
-        int d = (int)mhz - (int)s_wifi5_centers[i].mhz;
-        if (d < 0) d = -d;
-        if (d < best_delta) {
-            best_delta = d;
-            best = &s_wifi5_centers[i];
-        }
-    }
-    return best;
-}
-
-static esp_err_t lock_rx_only(void)
-{
-    (void)lmac_stop_hw_txq();
-    for (unsigned q = 0u; q < MAC_TXQ_COUNT; ++q)
-        REG32(MAC_TXQ0_CONF - q * MAC_TXQ_STRIDE) &= ~MAC_TXQ_ENABLE;
-    __asm__ __volatile__("fence iorw, iorw" ::: "memory");
-    for (unsigned q = 0u; q < MAC_TXQ_COUNT; ++q) {
-        if ((REG32(MAC_TXQ0_CONF - q * MAC_TXQ_STRIDE) & MAC_TXQ_ENABLE) != 0u)
-            return ESP_ERR_INVALID_STATE;
-    }
-    return ESP_OK;
-}
-
-static esp_err_t route_modem_iq(void)
-{
-    uint64_t mask = 0u;
-    for (unsigned lane = 0u; lane < 8u; ++lane)
-        mask |= 1ULL << s_iq_pins[lane];
-    const gpio_config_t cfg = {
-        .pin_bit_mask = mask,
-        .mode = GPIO_MODE_INPUT_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE,
-    };
-    esp_err_t err = gpio_config(&cfg);
-    if (err != ESP_OK) return err;
-    for (unsigned lane = 0u; lane < 8u; ++lane) {
-        esp_rom_gpio_connect_out_signal(s_iq_pins[lane],
-                                        MODEM_DIAG0_IDX + s_iq_diag[lane],
-                                        false, false);
-    }
-    __asm__ __volatile__("fence iorw, iorw" ::: "memory");
-    return ESP_OK;
-}
-
-static void enable_continuous_modem(void)
-{
-    REG32(HP_SRAM_USAGE) = (REG32(HP_SRAM_USAGE) & 0xfffef0ffu) | 0x00010000u;
-
-    REG32(SOURCE_CTRL) &= 0xff87ffffu;
-    REG32(SOURCE_MUX) = (REG32(SOURCE_MUX) & 0xfffffff8u) | 1u;
-    REG32(MODEM_CLOCK) = UINT32_MAX;
-    REG32(FE_ENABLE) |= 4u;
-    REG32(FE_PATH) &= ~1u;
-
-    uint32_t v = REG32(DUMP_FORMAT);
-    v = (v & 0xff03ffffu) | 0x006c0000u;
-    REG32(DUMP_FORMAT) = v;
-    v = (REG32(DUMP_FORMAT) & 0xfffc0fffu) | 0x0001a000u;
-    REG32(DUMP_FORMAT) = v;
-    v = (REG32(DUMP_FORMAT) & 0xfffff03fu) | 0x00000640u;
-    REG32(DUMP_FORMAT) = v;
-    v = (REG32(DUMP_FORMAT) & 0xffffffc0u) | 0x18u;
-    REG32(DUMP_FORMAT) = v | 0x01000000u;
-
-    /* Pre-trigger circular mode: TX_START never fires because the MAC TX
-     * queues are disabled, so samples stream continuously onto MODEM_DIAG. */
-    REG32(DUMP_PTR_MODE) = (REG32(DUMP_PTR_MODE) & ~SELECTOR_MASK) | TX_START_SELECT;
-
-    uint32_t ctrl = REG32(DUMP_CTRL);
-    ctrl &= ~(CTRL_ENABLE | 0x00080000u | 0x00040000u);
-    ctrl |= CTRL_DUMP_FIRST;
-    ctrl = (ctrl & ~0x0001ffffu) | 16384u;
-    REG32(DUMP_CTRL) = ctrl;
-    __asm__ __volatile__("fence iorw, iorw" ::: "memory");
-    REG32(DUMP_CTRL) = ctrl | CTRL_ENABLE;
-    __asm__ __volatile__("fence iorw, iorw" ::: "memory");
-}
-
-/* Re-asserted after bring-up and after every retune: the vendor PHY may
- * touch receive state when changing channel. */
-static void assert_receive_state(void)
-{
-    phy_disable_agc();
-    phy_rfagc_disable();
-    phy_wifi_fbw_sel(1u); /* BW40 analog filter */
-    phy_force_rx_gain(true, s_gain);
-}
+static uint8_t s_gain = 30u;
+static uint8_t s_gain_max = 89u;
+static const char *s_check = "not_run";
 
 bool rf_frontend_can_tune(uint16_t mhz)
 {
     return mhz >= RF_MIN_MHZ && mhz <= RF_MAX_MHZ;
+}
+
+static void force_gain(void)
+{
+    force_rx_gain(1u, s_gain, 0u);
+}
+
+bool rf_frontend_hold_gain(void)
+{
+    /* Rewriting the force while it already holds disturbs the receiver
+     * (C5MK RF_RESEARCH.md section 3), so write only when it is lost. */
+    uint32_t v = REG32(AGC_FORCE_REG);
+    if ((v & AGC_FORCE_EN) && (v >> AGC_FORCE_SHIFT) == s_gain) return false;
+    force_gain();
+    return true;
+}
+
+/* A capture is live if I/Q actually vary and carry the forced gain. */
+static bool capture_live(bool stock)
+{
+    const uint32_t *s;
+    esp_err_t err = stock ? iq_dump_stock(CHECK_SAMPLES, &s)
+                          : iq_dump_capture(CHECK_SAMPLES, &s);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "check capture failed: %s", esp_err_to_name(err));
+        return false;
+    }
+    int64_t si = 0, sq = 0, si2 = 0, sq2 = 0;
+    uint32_t gain_ok = 0;
+    for (uint32_t k = 0; k < CHECK_SAMPLES; ++k) {
+        int32_t i = bp_sample_i(s[k]), q = bp_sample_q(s[k]);
+        si += i;
+        sq += q;
+        si2 += i * i;
+        sq2 += q * q;
+        gain_ok += bp_sample_gain(s[k]) == s_gain;
+    }
+    double n = CHECK_SAMPLES;
+    double var = (double)(si2 + sq2) / n - ((double)si * si + (double)sq * sq) / (n * n);
+    ESP_LOGI(TAG, "check (%s): I/Q variance %.2f LSB^2, gain field %lu/%lu",
+             stock ? "stock" : "direct", var, (unsigned long)gain_ok,
+             (unsigned long)CHECK_SAMPLES);
+    return var > 0.05 && gain_ok > CHECK_SAMPLES * 9u / 10u;
+}
+
+static void tune_lo(uint16_t pilot_mhz)
+{
+    int16_t trim;
+    memcpy(&trim, &phy_param[PHY_PARAM_TRIM], sizeof(trim));
+    phy_set_rf_freq_offset(phy_param[PHY_PARAM_XTAL],
+                           (uint32_t)pilot_mhz - BP_LO_OFFSET_MHZ, trim);
 }
 
 esp_err_t rf_frontend_start(uint16_t mhz, uint8_t gain_idx)
@@ -203,95 +125,75 @@ esp_err_t rf_frontend_start(uint16_t mhz, uint8_t gain_idx)
     err = esp_event_loop_create_default();
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) return err;
 
-    /* sta_disconnected_pm must be false or the idle STA periodically powers
-     * down RF/PHY and MODEM_DIAG stops clocking. */
+    /* No interface: nothing associates or transmits. Promiscuous receive
+     * with an empty filter keeps the PHY powered without buffering frames. */
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    cfg.sta_disconnected_pm = false;
     node_trace("t10_wifi_init");
     if ((err = esp_wifi_init(&cfg)) != ESP_OK) return err;
     if ((err = esp_wifi_set_storage(WIFI_STORAGE_RAM)) != ESP_OK) return err;
-    if ((err = esp_wifi_set_mode(WIFI_MODE_STA)) != ESP_OK) return err;
+    if ((err = esp_wifi_set_mode(WIFI_MODE_NULL)) != ESP_OK) return err;
     if ((err = esp_wifi_start()) != ESP_OK) return err;
     node_trace("t11_wifi_start");
-    if ((err = esp_wifi_set_band_mode(WIFI_BAND_MODE_5G_ONLY)) != ESP_OK) return err;
     if ((err = esp_wifi_set_ps(WIFI_PS_NONE)) != ESP_OK) return err;
-
-    wifi_protocols_t protocols = {
-        .ghz_2g = WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G |
-                  WIFI_PROTOCOL_11N | WIFI_PROTOCOL_11AX,
-        .ghz_5g = WIFI_PROTOCOL_11A | WIFI_PROTOCOL_11N,
-    };
-    if ((err = esp_wifi_set_protocols(WIFI_IF_STA, &protocols)) != ESP_OK) return err;
-    wifi_bandwidths_t bandwidths = {.ghz_2g = WIFI_BW20, .ghz_5g = WIFI_BW40};
-    if ((err = esp_wifi_set_bandwidths(WIFI_IF_STA, &bandwidths)) != ESP_OK) return err;
-    if ((err = esp_wifi_set_channel(RF_BOOT_CHANNEL, WIFI_SECOND_CHAN_NONE)) != ESP_OK)
-        return err;
-    node_trace("t12_channel");
-
-    /* Promiscuous with a zero filter keeps the RX path active without the
-     * LMAC buffering packets. */
-    if ((err = esp_wifi_set_promiscuous(true)) != ESP_OK) return err;
     wifi_promiscuous_filter_t filter = {.filter_mask = 0};
     (void)esp_wifi_set_promiscuous_filter(&filter);
+    if ((err = esp_wifi_set_promiscuous(true)) != ESP_OK) return err;
+    if ((err = esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE)) != ESP_OK) return err;
+    node_trace("t12_promisc");
 
-    node_trace("t13_promisc");
-    if ((err = lock_rx_only()) != ESP_OK) return err;
-    node_trace("t14_rx_only");
-    if ((err = route_modem_iq()) != ESP_OK) return err;
-    node_trace("t15_route_iq");
-    enable_continuous_modem();
-    node_trace("t16_modem");
+    /* adctrig() prints its registers through phy_printf at INFO. */
+    esp_log_level_set("phy", ESP_LOG_WARN);
 
-    s_gain = gain_idx;
-    s_mhz = 5865u;
-    assert_receive_state();
-    node_trace("t17_rx_state");
+    uint32_t agc = REG32(AGC_FORCE_REG);
+    uint8_t gmax = (uint8_t)((agc >> AGC_GAIN_MAX_SHIFT) & AGC_GAIN_MAX_MASK);
+    if (gmax) s_gain_max = gmax;
+    s_gain = gain_idx > s_gain_max ? s_gain_max : gain_idx;
 
-    if (mhz != s_mhz) {
-        err = rf_frontend_tune(mhz);
-        if (err != ESP_OK)
-            ESP_LOGW(TAG, "boot tune to %u MHz failed (%s); staying on 5865",
-                     mhz, esp_err_to_name(err));
+    phy_set_chanfreq(BAND_SETUP_MHZ, BAND_WIDE);
+    node_trace("t13_band");
+    force_gain();
+
+    /* Boot check: captures must be live. Then switch the transmit path off
+     * as a safety measure and check again; only if captures went flat turn
+     * the receive path on explicitly. */
+    bool live = capture_live(true);
+    phy_pbus_workmode();
+    phy_pbus_xpd_tx_off();
+    bool live_tx_off = capture_live(true);
+    s_check = "live";
+    if (!live_tx_off) {
+        phy_pbus_xpd_rx_on(1u);
+        phy_set_rxclk_en(1u);
+        s_check = capture_live(true) ? "live_rx_on" : "flat";
     }
-    ESP_LOGI(TAG, "RF ready: %u MHz, gain %u", s_mhz, s_gain);
+    ESP_LOGI(TAG, "boot check: %s (before TX off: %s)", s_check, live ? "live" : "flat");
+    node_trace("t14_check");
+
+    s_mhz = BAND_SETUP_MHZ;
+    err = rf_frontend_tune(rf_frontend_can_tune(mhz) ? mhz : RF_MIN_MHZ);
+    if (err != ESP_OK) return err;
+    (void)capture_live(false); /* first direct capture, logged */
+    node_trace("t15_tuned");
+    ESP_LOGI(TAG, "RF ready: %u MHz (LO %u), gain %u of %u", s_mhz,
+             s_mhz - BP_LO_OFFSET_MHZ, s_gain, s_gain_max);
     return ESP_OK;
 }
 
 esp_err_t rf_frontend_tune(uint16_t mhz)
 {
     if (!rf_frontend_can_tune(mhz)) return ESP_ERR_NOT_SUPPORTED;
-
-    const wifi5_center_t *center = nearest_center(mhz);
     node_trace("t70_tune_start");
-    esp_err_t err = esp_wifi_set_channel(center->channel, WIFI_SECOND_CHAN_NONE);
-    node_trace("t71_set_channel");
-    if (err != ESP_OK) return err;
-
-    uint8_t primary = 0;
-    wifi_second_chan_t secondary = WIFI_SECOND_CHAN_NONE;
-    err = esp_wifi_get_channel(&primary, &secondary);
-    if (err != ESP_OK) return err;
-    if (primary != center->channel) return ESP_ERR_INVALID_STATE;
-
-    /* EXPERIMENTAL (as in C5VRX): off-center FPV frequencies use the
-     * undocumented phy_set_freq() from the nearest public center. */
-    if (mhz != center->mhz) {
-        node_trace("t72_set_freq_in");
-        phy_set_freq(mhz, 0);
-        node_trace("t73_set_freq_out");
-    }
-
-    enable_continuous_modem();
-    assert_receive_state();
-    node_trace("t74_tune_done");
+    tune_lo(mhz);
+    (void)rf_frontend_hold_gain();
+    node_trace("t71_tune_done");
     s_mhz = mhz;
     return ESP_OK;
 }
 
 void rf_frontend_set_gain(uint8_t gain_idx)
 {
-    s_gain = gain_idx;
-    phy_force_rx_gain(true, gain_idx);
+    s_gain = gain_idx > s_gain_max ? s_gain_max : gain_idx;
+    (void)rf_frontend_hold_gain();
 }
 
 uint16_t rf_frontend_mhz(void)
@@ -302,4 +204,14 @@ uint16_t rf_frontend_mhz(void)
 uint8_t rf_frontend_gain(void)
 {
     return s_gain;
+}
+
+uint8_t rf_frontend_gain_max(void)
+{
+    return s_gain_max;
+}
+
+const char *rf_frontend_check(void)
+{
+    return s_check;
 }

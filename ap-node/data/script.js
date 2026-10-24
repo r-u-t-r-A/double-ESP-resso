@@ -29,10 +29,10 @@ var elrsBackpack = false;
 // Firmware runs the start countdown (/timer/begin + raceArm/raceStart/raceStop events).
 var raceCtl = false;
 
-// double-ESP-resso: the C5 RF node tunes 5180-5885 MHz only.
+// double-ESP-resso: the C5 RF node tunes 5180-5917 MHz only (R8 is the top).
 var rfNode = false;
 const RF_NODE_MIN_MHZ = 5180,
-  RF_NODE_MAX_MHZ = 5885;
+  RF_NODE_MAX_MHZ = 5917;
 
 const freqLookup = [
   [5865, 5845, 5825, 5805, 5785, 5765, 5745, 5725],

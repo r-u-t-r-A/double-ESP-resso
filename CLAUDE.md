@@ -8,23 +8,37 @@ The user-facing documentation is `README.md` and `docs/`.
 A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 boards.
 
 - **RF node** (`rf-node/`, ESP-IDF v6.0.2, GPL-3.0):
-  - Measures 5.8 GHz power on one channel and sends RSSI (0-255) at 1 kHz over UART.
-  - Derived from [C5VRX](https://github.com/Twotoz/C5VRX) `main/rf.c` (bring-up)
-    and `main/video.c` `prepare_rx()` (PARLIO RX setup). A local checkout lives
-    at `~/C5VRX` on the original machine.
+  - Measures narrow-band power of one channel from raw 10-bit I/Q and sends RSSI
+    (0-255) at 1 kHz over UART.
+  - The RSSI path (firmware 2, 2026-10-24) reimplements FPVGate C5MK's published method
+    (paper + `docs/RADIO_INTERNALS.md`, `RF_RESEARCH.md`, `PROVENANCE.md`). A checkout is at
+    `~/fpv-lap-timing-shenanigans/refs/FPVGateC5MK`, and the paper at `~/FPVGate_C5MK_Paper.pdf`.
+  - Firmware 1 was derived from [C5VRX](https://github.com/Twotoz/C5VRX) (MODEM_DIAG + PARLIO).
 - **AP node** (`ap-node/`, PhobosLT fork at upstream `142cf08`, MIT):
   - Runs the 2.4 GHz Wi-Fi AP, the web UI and lap detection.
 - **Link:** the two-way UART protocol in `common/c5link_proto.h`. See `docs/protocol.md`.
 
 ## Decisions and why
 
-- **No video at all.**
-  - The C5VRX composite path, DAC, BitScrambler and demodulator are not used.
-  - Power measurement doesn't need gapless sampling, so each 1 ms tick does one
-    finite 4096-byte PARLIO receive instead of C5VRX's infinite ring.
+- **RSSI = C5MK band power, reimplemented, never copied.** C5MK is CC BY-NC-SA 4.0, which
+  can't be mixed with our GPL. Work from its docs and paper (facts and methods), and from
+  our own disassembly of the Apache-2.0 `libphy.a` / `librftest.a`. Don't read or port its
+  `multipilot/src` code.
+  - Wi-Fi in `WIFI_MODE_NULL` + promiscuous keeps the PHY powered. `phy_set_chanfreq(5180, 1)`
+    calibrates the band once, then `phy_set_rf_freq_offset(phy_param[49], pilot-10,
+    (int16)phy_param[30])` tunes the PLL. These offsets were rechecked in IDF 6.0.2's libphy.
+  - `iq_dump.c`: one stock `adctrig()` programs the dump engine, then direct register
+    captures follow (2048 words at 0x40830000). The bank 0x40820000-0x4083FFFF is
+    heap-reserved, and `rf-node/check_sram.py` fails the build if static data reaches it.
+  - `band_power.h` (plain C, host-tested): LO 10 MHz below the pilot, spectrum inverted
+    (`BP_SPECTRUM_SIGN`), Hann-8 blocks mixed to 0 Hz, single-pass DC removal, median-of-3
+    + EMA 0.3.
+  - The gain is re-forced only when `0x600A702C` shows it was lost. Rewriting a held force
+    causes spikes (C5MK RF_RESEARCH section 3).
+  - Single pilot, so no `hopNoWait`: the stock 398 us retune is fine.
 - **Two stacked XIAO C5 boards** keep the BOM to two parts.
-  - The RF board can't also run Wi-Fi, because any packet TX would disturb the
-    MODEM_DIAG capture.
+  - The RF board can't also run a Wi-Fi AP, because packet TX would disturb the
+    I/Q capture.
 - **Lap detection stays in PhobosLT on the AP node.** The RF node only sends raw RSSI.
 - **The link must be two-way.** The user wants to change the tracked channel
   (R1/R3/R6/R7 matter) from the PhobosLT web UI.
@@ -34,12 +48,13 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
   - Not D6/D7: GPIO11/12 are the C5 UART0 console pins. Both chips' ROM
     boot logs and the Arduino core's console are driven out on GPIO11, which
     garbled the link (found on hardware 2026-09-30).
-  - The RF node drives its IQ bus on D0-D3 and D10.
+  - Firmware 1 drove an IQ bus on D0-D3 and D10. Firmware 2 drives no pins besides the UART.
   - D2/D3 are strapping pins.
 - **Scope is single pilot for now.** Multi-pilot on one C5 would need fast retune
   measurements first, because retune cost is unmeasured.
-- **RSSI scaling:** mean (2s+1)² power per axis, mapped logarithmically so the
-  ~23.5 dB range at one fixed gain becomes 0-255. It is not calibrated dBm.
+- **RSSI scaling:** band power in dB re 1 LSB², filtered, with -6..54 dB mapped to
+  0-255 (4.25 counts/dB). The floor is about -2 dB, so about 18 counts. It is not
+  calibrated dBm.
 
 ## Gate LEDs
 
@@ -86,9 +101,13 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
   download mode; debug it through its NVS boot trace (namespace `trace`,
   read with `nvs_tool.py`) and the AP node's link counters, which print every
   10 s on the AP's USB console.
+- **2026-10-24:** the RSSI path was rewritten (firmware 2, C5MK method). It builds,
+  and `check_sram` and the host tests pass. It has **not run on hardware yet**.
 - Unproven:
-  - Tuning to R1/R3/R6/R7 (off-center channels use the undocumented `phy_set_freq`).
-  - The default gain of 40.
+  - All of firmware 2 on IDF 6.0.2: the boot check, the direct trigger, and the spectrum
+    sign (console `m`). C5MK only measured on IDF 5.5.1.
+  - The default gain of 30 (the RF node default; the AP pushes its own config value).
+  - Meter CPU cost: about 37 instructions/sample, so about 0.35 ms per 1 ms tick (estimated).
   - Desense from the 2.4 GHz AP.
   - XIAO battery sense on GPIO6/26, and whether the LED is active-low.
   - The gate LED strip (added after the first hardware-free build).
@@ -99,11 +118,12 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
 
 ## Next step
 
-Bring up the RF node alone over USB:
-1. Flash it.
-2. `s`, then `f 5658` / `f 5732` / `f 5843` / `f 5880` with a VTX on. `f 5917` must return `ERR_FREQ`.
-3. Record the noise floor and gate passes at several gains with `tools/rssi_log.py`.
-4. Choose the default gain.
+Bring up firmware 2 on the RF node alone over USB (`docs/bring-up.md` section 1):
+1. Flash it. `d` must show `check=live`, with `DUMP` direct captures climbing and no timeouts.
+2. Run `m` with a VTX on the tuned channel: the pilot must be well above the mirror.
+3. `f 5658` / `5732` / `5843` / `5880` / `5917` with a VTX on. `f 5925` must return `ERR_FREQ`.
+4. Record the noise floor and gate passes at several gains with `tools/rssi_log.py`, then
+   choose the default gain.
 
 ## Commands
 
@@ -117,7 +137,7 @@ cd ap-node && pio run -e XIAO_C5 -t upload && pio run -e XIAO_C5 -t uploadfs
 
 # host tests
 cc -std=c99 -Wall -Wextra -Werror -I common tests/test_c5link_proto.c -o /tmp/t_proto && /tmp/t_proto
-cc -std=c99 -Wall -Wextra -Werror -I rf-node/main tests/test_rssi_scale.c -lm -o /tmp/t_rssi && /tmp/t_rssi
+cc -std=c99 -Wall -Wextra -Werror -I rf-node/main tests/test_band_power.c -lm -o /tmp/t_bp && /tmp/t_bp
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/ELRSBACKPACK tests/test_elrs_msp.c -o /tmp/t_elrs && /tmp/t_elrs
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/LEDSTRIP tests/test_ledstrip_timing.c -o /tmp/t_led && /tmp/t_led
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/RSSISTREAM tests/test_rssi_stream.c -o /tmp/t_stream && /tmp/t_stream

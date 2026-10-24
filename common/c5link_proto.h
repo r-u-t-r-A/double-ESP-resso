@@ -30,7 +30,7 @@ extern "C" {
 #define C5LINK_MAX_LINE    48u
 #define C5LINK_MAX_GAIN    89u
 #define C5LINK_MIN_MHZ     5180u
-#define C5LINK_MAX_MHZ     5885u
+#define C5LINK_MAX_MHZ     5917u
 
 typedef enum {
     C5LINK_ST_OK = 0,

@@ -11,7 +11,8 @@
 #include "c5link_proto.h"
 #include "iq_power.h"
 
-#define NODE_FW_VERSION 1u
+/* 2: raw I/Q band-power meter (FPVGate C5MK method). */
+#define NODE_FW_VERSION 2u
 
 /* Applies an AP->RF command (F, G or Q). Blocks while retuning.
  * Always leaves the resulting status in *status. */
@@ -21,12 +22,16 @@ void node_status(c5link_msg_t *status);
 /* Latest measurement, for the USB console. Returns false if none yet. */
 bool node_latest(iq_power_t *out, uint32_t *count);
 
+/* One capture measured in the pilot and mirror bands (console 'm'). */
+esp_err_t node_probe(float *pilot_db, float *mirror_db);
+
 /* Bring-up diagnostics, reported by the USB console 'd' command. */
 typedef struct {
     const char *stage;       /* last boot step reached */
     uint32_t measure_ok;
     uint32_t measure_err;
     int last_err;            /* esp_err_t of the last failed capture */
+    uint32_t gain_reforced;  /* times the PHY had dropped the forced gain */
 } node_diag_t;
 void node_diag(node_diag_t *out);
 

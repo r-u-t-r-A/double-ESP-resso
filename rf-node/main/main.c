@@ -1,8 +1,8 @@
 /*
  * main.c - double-ESP-resso RF node.
  *
- * Measures 5.8 GHz carrier power on one FPV channel at 1 kHz and streams it
- * to the AP node over UART. The AP node owns the configuration; this node
+ * Measures the band power of one FPV channel from raw I/Q at 1 kHz and
+ * streams it to the AP node over UART. The AP node owns the configuration; this node
  * stores the last frequency/gain in NVS so it keeps measuring on its own.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -17,12 +17,12 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
+#include "iq_power.h"
 #include "node.h"
 #include "rf_frontend.h"
 
 #define DEFAULT_MHZ  5658u /* R1 */
-#define RF_BOOT_MHZ  5865u /* Wi-Fi ch173: no phy_set_freq() needed */
-#define DEFAULT_GAIN 40u
+#define DEFAULT_GAIN 30u   /* the gain C5MK was characterised at */
 #define SAMPLE_PERIOD_MS 1u
 
 static const char *TAG = "node";
@@ -35,6 +35,7 @@ static volatile const char *s_stage = "reset";
 static volatile uint32_t s_measure_ok;
 static volatile uint32_t s_measure_err;
 static volatile int s_last_err;
+static volatile uint32_t s_gain_reforced;
 
 static nvs_handle_t s_trace = 0;
 /* Non-zero when the previous boot hung inside a retune to this frequency. */
@@ -97,6 +98,7 @@ void node_diag(node_diag_t *out)
     out->measure_ok = s_measure_ok;
     out->measure_err = s_measure_err;
     out->last_err = s_last_err;
+    out->gain_reforced = s_gain_reforced;
 }
 
 static portMUX_TYPE s_latest_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -149,6 +151,7 @@ void node_apply(const c5link_msg_t *cmd, c5link_msg_t *status)
         xSemaphoreTake(s_rf_lock, portMAX_DELAY);
         s_state = C5LINK_ST_TUNING;
         esp_err_t err = guarded_tune(cmd->mhz);
+        iq_power_reset();
         s_state = err == ESP_OK ? C5LINK_ST_OK : C5LINK_ST_ERR_RF;
         xSemaphoreGive(s_rf_lock);
         if (err == ESP_OK) settings_save();
@@ -158,6 +161,7 @@ void node_apply(const c5link_msg_t *cmd, c5link_msg_t *status)
         if (cmd->gain == rf_frontend_gain()) break;
         xSemaphoreTake(s_rf_lock, portMAX_DELAY);
         rf_frontend_set_gain(cmd->gain);
+        iq_power_reset();
         xSemaphoreGive(s_rf_lock);
         settings_save();
         break;
@@ -165,6 +169,14 @@ void node_apply(const c5link_msg_t *cmd, c5link_msg_t *status)
         break;
     }
     node_status(status);
+}
+
+esp_err_t node_probe(float *pilot_db, float *mirror_db)
+{
+    xSemaphoreTake(s_rf_lock, portMAX_DELAY);
+    esp_err_t err = iq_power_probe(pilot_db, mirror_db);
+    xSemaphoreGive(s_rf_lock);
+    return err;
 }
 
 bool node_latest(iq_power_t *out, uint32_t *count)
@@ -188,6 +200,7 @@ static void measure_task(void *arg)
         if (xSemaphoreTake(s_rf_lock, 0) != pdTRUE) continue;
         iq_power_t p;
         esp_err_t err = iq_power_measure(&p);
+        if (rf_frontend_hold_gain()) s_gain_reforced = s_gain_reforced + 1;
         xSemaphoreGive(s_rf_lock);
         if (err != ESP_OK) {
             s_measure_err = s_measure_err + 1;
@@ -242,16 +255,14 @@ void app_main(void)
     uint16_t mhz;
     uint8_t gain;
     settings_load(&mhz, &gain);
-    /* Bring RF up on the plain Wi-Fi center first; the saved channel may need
-     * the experimental phy_set_freq() step, which runs last (boot_tune) so a
-     * failure there cannot keep the console and link from starting. */
-    stage("rf_frontend_start");
-    ESP_ERROR_CHECK(rf_frontend_start(RF_BOOT_MHZ, gain));
-    node_trace("t30_rf_ok");
-
+    /* Bring RF up on R1 first; the saved channel is tuned last (boot_tune),
+     * under the retune guard, so a hang there cannot keep the console and
+     * link from starting on the next boot. */
     stage("iq_power_init");
     ESP_ERROR_CHECK(iq_power_init());
-    node_trace("t31_iq_ok");
+    stage("rf_frontend_start");
+    ESP_ERROR_CHECK(rf_frontend_start(DEFAULT_MHZ, gain));
+    node_trace("t30_rf_ok");
 
     stage("link_start");
     link_start();
@@ -260,7 +271,7 @@ void app_main(void)
     xTaskCreate(measure_task, "measure", 4096, NULL, 5, NULL);
 
     if (s_prev_hang_mhz) {
-        /* Stay on the bootstrap center; the AP can still request a retune. */
+        /* Stay on R1; the AP can still request a retune. */
         s_state = C5LINK_ST_ERR_RF;
     } else if (mhz != rf_frontend_mhz()) {
         stage("boot_tune");

@@ -4,8 +4,9 @@ A cheap FPV race lap timer made from **two stacked Seeed XIAO ESP32-C5
 boards** and no RX5808 module.
 
 - The **RF node** turns the ESP32-C5's own 5 GHz Wi-Fi radio into a 5.8 GHz
-  analog FPV power meter, using the receive path from
-  [C5VRX](https://github.com/Twotoz/C5VRX).
+  analog FPV power meter. It measures narrow-band power from raw I/Q
+  captures, the method published by
+  [FPVGate C5MK](https://github.com/LouisHitchcock/FPVGateC5MK).
 - The **AP node** runs a port of [PhobosLT](https://github.com/phobos-/PhobosLT):
   a 2.4 GHz Wi-Fi access point, the web UI, lap detection, voice callouts and
   RSSI calibration. Voice callouts need an offline browser voice; see
@@ -14,7 +15,7 @@ boards** and no RX5808 module.
   [docs/RADIO_START.md](docs/RADIO_START.md).
 
 ```
- drone VTX ~~ 5.8 GHz ~~>  [ RF node  XIAO ESP32-C5 ]  MODEM_DIAG IQ -> power -> RSSI 0-255 @ 1 kHz
+ drone VTX ~~ 5.8 GHz ~~>  [ RF node  XIAO ESP32-C5 ]  raw I/Q -> band power -> RSSI 0-255 @ 1 kHz
                                  |  D5/D9 UART, both directions
                            [ AP node  XIAO ESP32-C5 ]  PhobosLT lap logic + web UI
  phone / laptop <~~ 2.4 GHz Wi-Fi AP "PhobosLT_xxxxxx" ~~
@@ -25,26 +26,26 @@ AP node retunes the RF node. The RF gain is set the same way, from the
 Calibration tab.
 
 > **Status: experimental, not yet validated on hardware.**
-> - **Tested:** both firmwares build, and the protocol and RSSI scaling pass
->   their host tests.
-> - **Not yet measured:** tuning to R1/R3/R6/R7, RSSI behaviour during gate
->   passes, and desense from the AP radio.
+> - **Tested:** both firmwares build, and the protocol and band-power meter
+>   pass their host tests.
+> - **Not yet measured:** the raw I/Q meter (added 2026-10-24) on our
+>   hardware, RSSI behaviour during gate passes, and desense from the AP radio.
 >
 > See [docs/bring-up.md](docs/bring-up.md) for the planned checks.
 
 ## Channels
 
-The C5 radio can only be tuned from **5180 to 5885 MHz**.
+The RF node accepts **5180 to 5917 MHz**.
 
 | Band | Reachable | Not reachable |
 |------|-----------|---------------|
-| R (RaceBand) | R1 5658, R2, R3 5732, R4, R5, R6 5843, R7 5880 | R8 5917 |
+| R (RaceBand) | R1–R8 (5658–5917) | – |
 | A / B / F | all | – |
-| E | E1–E5 | E6–E8 |
-| L | all (5362–5621), but these are far below the 5.66 GHz bootstrap center and untested | – |
+| E | E1–E6 | E7, E8 |
+| L | all (5362–5621), untested with a transmitter | – |
 
-Frequencies that fall between Wi-Fi channels are reached with the same
-experimental `phy_set_freq()` step that C5VRX uses.
+Every frequency is tuned the same way: the PLL is set directly, with the LO
+10 MHz below the pilot. FPVGate C5MK tested R1–R8 with a transmitter.
 
 ## Hardware
 
@@ -55,20 +56,20 @@ experimental `phy_set_freq()` step that C5VRX uses.
   - A **WS2812B strip around the gate** on the AP node's D4, with its own
     5 V supply. See [docs/hardware.md](docs/hardware.md#ws2812b-gate-led-strip-ap-node-d4).
 
-**Join only these four pins between the boards:** 5V, GND, D5 and D9. The RF
-node streams its 40–80 MHz IQ bus out on D0–D3 and D10, and D2/D3 are
-strapping pins, so a full pin-to-pin stack is not safe. See
+**Join only these four pins between the boards:** 5V, GND, D5 and D9. D2/D3
+are strapping pins and D6/D7 carry the UART0 console, so a full pin-to-pin
+stack is not safe. See
 [docs/hardware.md](docs/hardware.md).
 
 ## Repository layout
 
 | Path | What it contains |
 |------|------------------|
-| `rf-node/` | ESP-IDF v6.0.2 app for the RF node. GPL-3.0, derived from C5VRX. |
+| `rf-node/` | ESP-IDF v6.0.2 app for the RF node. GPL-3.0. |
 | `ap-node/` | PlatformIO / Arduino PhobosLT fork for the AP node. MIT, from PhobosLT. |
 | `common/c5link_proto.h` | The shared UART line protocol (MIT). See [docs/protocol.md](docs/protocol.md). |
 | `tools/rssi_log.py` | Records and plots RF node RSSI over USB, for calibration. |
-| `tests/` | Host unit tests for the protocol and the RSSI scaling. |
+| `tests/` | Host unit tests: protocol, band-power meter, ELRS, LED strip, RSSI stream. |
 
 ## Documentation
 
@@ -121,7 +122,7 @@ matches newer ESPAsyncWebServer releases.
 
 ```sh
 cc -std=c99 -Wall -Wextra -Werror -I common tests/test_c5link_proto.c -o /tmp/t_proto && /tmp/t_proto
-cc -std=c99 -Wall -Wextra -Werror -I rf-node/main tests/test_rssi_scale.c -lm -o /tmp/t_rssi && /tmp/t_rssi
+cc -std=c99 -Wall -Wextra -Werror -I rf-node/main tests/test_band_power.c -lm -o /tmp/t_bp && /tmp/t_bp
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/ELRSBACKPACK tests/test_elrs_msp.c -o /tmp/t_elrs && /tmp/t_elrs
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/LEDSTRIP tests/test_ledstrip_timing.c -o /tmp/t_led && /tmp/t_led
 ```
@@ -143,7 +144,7 @@ cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/LEDSTRIP tests/test_ledstrip_ti
 For finer calibration without the AP node, plug the RF node in over USB and run:
 
 ```sh
-tools/rssi_log.py /dev/ttyACM0 --freq 5732 --gain 40 --seconds 60 -o pass.csv
+tools/rssi_log.py /dev/ttyACM0 --freq 5732 --gain 30 --seconds 60 -o pass.csv
 tools/rssi_log.py --plot pass.csv
 ```
 
@@ -168,29 +169,39 @@ the tone.
 
 ## How the RF node measures RSSI
 
-The RF node brings the ESP32-C5 Wi-Fi PHY up **receive-only**, the same way as C5VRX:
-- Packet AGC is disabled and a fixed gain index is forced.
-- MODEM_DIAG is routed to GPIOs.
-- PARLIO RX captures the Q4/I4 sample bus at 40 MS/s.
+The method is [FPVGate C5MK](https://github.com/LouisHitchcock/FPVGateC5MK)'s,
+reimplemented from its paper and docs. No C5MK code is used.
+
+The RF node starts Wi-Fi with no interface, so nothing transmits, and keeps
+the PHY receiving. It calibrates the 5 GHz band once, then:
+- tunes the PLL directly (`phy_set_rf_freq_offset`) with the LO **10 MHz
+  below the pilot**;
+- forces a fixed gain index, and re-forces it only if the PHY drops it.
 
 Every millisecond it:
-1. Captures one 4096-sample window (about 102 µs).
-2. Computes the mean I² + Q², treating each 4-bit code as the centre of its
-   quantizer bucket.
-3. Maps that power logarithmically to 0–255, about 10.8 counts per dB across
-   the roughly 23.5 dB range available at one gain.
+1. Captures 2048 raw samples (25.6 µs) from the PHY's ADC dump engine:
+   10-bit I and Q at 80 MS/s, written into a reserved SRAM bank.
+2. Mixes the pilot to 0 Hz and sums Hann-windowed blocks of 8 samples. That
+   is the power in a band about 10 MHz wide around the pilot, with DC
+   removed. The C5's spectrum is inverted, so the pilot sits at −10 MHz.
+3. Filters the dB value (median of 3, then EMA with α 0.3).
+4. Maps −6 to 54 dB to 0–255, which is 4.25 counts per dB.
+
+Compared with the earlier wideband 4-bit MODEM_DIAG capture, this gives
+10-bit samples instead of 4-bit, about 60 dB of span instead of 23.5 dB, and
+a band that ignores Raceband neighbours (37 MHz away) and most Wi-Fi. No
+GPIOs are used.
 
 This is not calibrated dBm. Lap timing only needs a repeatable relative peak,
-and PhobosLT's per-sample Kalman filter and enter/exit detection work on it
-unchanged.
-
-The C5VRX composite-video path is not used at all. For power measurement
-there is no need for gapless sampling, demodulation or the DAC.
+and PhobosLT's Kalman filter and enter/exit detection work on it unchanged.
 
 ## Licensing
 
-- **`rf-node/`** contains code derived from C5VRX and is licensed
-  **GPL-3.0-or-later** (see `LICENSE`).
+- **`rf-node/`** is licensed **GPL-3.0-or-later** (see `LICENSE`). Its first
+  versions were derived from C5VRX. The current RSSI path follows FPVGate
+  C5MK's published method but contains no C5MK code. C5MK itself is
+  CC BY-NC-SA 4.0, which can't be mixed with the GPL, so don't copy its
+  source into this tree.
 - **`ap-node/`** is derived from PhobosLT and stays **MIT**. The original
   copyright notice is kept in `ap-node/LICENSE`.
 - **`common/c5link_proto.h`** is MIT, so both nodes can use it.

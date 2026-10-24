@@ -7,9 +7,10 @@
  * Commands (one per line):
  *   f <mhz>   tune          g <idx>   fixed RX gain
  *   s         status        r         toggle 100 Hz CSV stream
- *   d         diagnostics: boot stage and capture counters
+ *   d         diagnostics: boot check, capture and gain counters
+ *   m         one capture in the pilot band and its mirror band
  *   t         bring-up trace (kept from a boot that hung while retuning)
- * Stream format: RSSI,<ms>,<rssi>,<mean_power>,<clip_permille>
+ * Stream format: RSSI,<ms>,<rssi>,<filt_db>,<band_db>,<clip_permille>,<gain_bad>
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -25,7 +26,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "iq_dump.h"
 #include "node.h"
+#include "rf_frontend.h"
 
 static void print_status(const c5link_msg_t *s)
 {
@@ -62,10 +65,32 @@ static void handle_line(char *line, bool *stream)
     case 'd':
     case 'D': {
         node_diag_t d;
+        iq_dump_stats_t ds;
         node_diag(&d);
-        printf("DIAG,stage=%s,measure_ok=%lu,measure_err=%lu,last_err=%s\n", d.stage,
+        iq_dump_stats(&ds);
+        printf("DIAG,stage=%s,check=%s,gain=%u,gainmax=%u,measure_ok=%lu,measure_err=%lu,"
+               "last_err=%s,gain_reforced=%lu\n",
+               d.stage, rf_frontend_check(), rf_frontend_gain(), rf_frontend_gain_max(),
                (unsigned long)d.measure_ok, (unsigned long)d.measure_err,
-               d.last_err ? esp_err_to_name(d.last_err) : "none");
+               d.last_err ? esp_err_to_name(d.last_err) : "none",
+               (unsigned long)d.gain_reforced);
+        printf("DUMP,stock=%lu,direct=%lu,timeouts=%lu,short=%lu,long=%lu\n",
+               (unsigned long)ds.stock, (unsigned long)ds.direct, (unsigned long)ds.timeouts,
+               (unsigned long)ds.short_reject, (unsigned long)ds.long_reject);
+        return;
+    }
+    case 'm':
+    case 'M': {
+        node_diag_t d;
+        node_diag(&d);
+        if (strcmp(d.stage, "running") != 0) {
+            printf("BOOT,%s\n", d.stage);
+            return;
+        }
+        float pilot, mirror;
+        esp_err_t err = node_probe(&pilot, &mirror);
+        if (err != ESP_OK) printf("ERR,%s\n", esp_err_to_name(err));
+        else printf("MIRROR,%u,%.2f,%.2f\n", rf_frontend_mhz(), (double)pilot, (double)mirror);
         return;
     }
     case 't':
@@ -78,7 +103,7 @@ static void handle_line(char *line, bool *stream)
         printf("STREAM,%s\n", *stream ? "on" : "off");
         return;
     default:
-        printf("commands: f <mhz> | g <idx> | s | r | d | t\n");
+        printf("commands: f <mhz> | g <idx> | s | r | d | m | t\n");
         return;
     }
     node_diag_t d;
@@ -127,8 +152,9 @@ static void console_task(void *arg)
             uint32_t count;
             if (node_latest(&p, &count) && count != last_count) {
                 last_count = count;
-                printf("RSSI,%lld,%u,%.2f,%u\n", esp_timer_get_time() / 1000,
-                       p.rssi, (double)p.mean_power, p.clip_permille);
+                printf("RSSI,%lld,%u,%.2f,%.2f,%u,%u\n", esp_timer_get_time() / 1000,
+                       p.rssi, (double)p.filt_db, (double)p.band_db, p.clip_permille,
+                       p.gain_bad);
             }
         }
     }

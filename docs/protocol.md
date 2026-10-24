@@ -17,7 +17,7 @@ and tested in [`tests/test_c5link_proto.c`](../tests/test_c5link_proto.c).
 |-----------|------|---------|
 | RF → AP | `R,<seq>,<rssi>` | One RSSI sample: `seq` 0–255 wraps, `rssi` 0–255. Sent at 1 kHz, about 14 bytes each, so ~140 kbit/s. |
 | RF → AP | `S,<mhz>,<gain>,<state>,<fw>` | Status. Sent on boot, after every command, and once a second as a heartbeat. |
-| AP → RF | `F,<mhz>` | Tune. The RF node accepts 5180–5885 MHz. |
+| AP → RF | `F,<mhz>` | Tune. The RF node accepts 5180–5917 MHz (R8 is the top). |
 | AP → RF | `G,<gain>` | Fixed RX gain index, 0–89. |
 | AP → RF | `Q` | Ask for status. |
 
