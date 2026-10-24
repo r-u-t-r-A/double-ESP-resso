@@ -33,10 +33,10 @@
 #define PIN_C5LINK_RX 24      //D5 <- RF node TX
 #define PIN_C5LINK_TX 9       //D9 -> RF node RX
 #define PIN_BUZZER 8          //D8
-#define PIN_LED_STRIP 23      //D4, WS2812B data (330R series resistor)
+#define PIN_LED_STRIP 25      //D4, WS2812B data (330R series resistor)
 #define BUZZER_INVERTED false
 #define DEFAULT_FREQUENCY 5658 //R1
-#define DEFAULT_RF_GAIN 40
+#define DEFAULT_RF_GAIN 35
 #define C5VRX_AP_TX_POWER WIFI_POWER_11dBm
 
 //ESP23-C3
