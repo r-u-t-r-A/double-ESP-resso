@@ -66,12 +66,21 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
     for WS2811, and uses one RMT block (48 symbols on the C5, no DMA), which Wi-Fi interrupts can underrun.
 - The gate is 50 cm in diameter, so about 94 LEDs at 60/m.
 - The start countdown runs on the AP node (`lib/RACECONTROL`). The web UI posts `/timer/begin`
-  and reacts to the `raceArm` / `raceStart` / `raceStop` SSE events for voice, tone and display.
-  - The start tone comes from either the AP buzzer or the browser, never both: config v5
-    `startTone` (`START_TONE_BUZZER` default / `START_TONE_BROWSER`), checked in
-    `LapTimer::start()` and in the browser's `raceStart` handler. Voice is separate.
-  - `RaceControl::stop()` calls `LedStrip::disarm()`. The strip's own arming flag otherwise
-    stayed red after a countdown was cancelled, until a race started or its 15 s timeout.
+  and reacts to the `raceArm` / `raceTone` / `raceStart` / `raceStop` SSE events for voice,
+  tones and display.
+  - The sequence is RotorHazard's default race format (behaviour only, no RH code: RH's licence
+    is "MIT NON-AI"). "Arm your quad" (speech time from the announcer rate), then 3 staging
+    tones 1 s apart (100 ms), then the start tone (700 ms) 0.5-4 s after the last one.
+  - Tones come from either the AP buzzer or the browser, never both: config v5 `startTone`
+    (`START_TONE_BUZZER` default / `START_TONE_BROWSER`), checked in `RaceControl`,
+    `LapTimer::start()`, and the browser's `raceTone` / `raceStart` handlers (RH tones:
+    440 Hz / 880 Hz triangle). Voice is separate.
+  - Gate colours follow RH's default LED effects for events (staging orange 2-on-1-off, start
+    green 4 s, stop red 4 s, gate entry seat-1 blue sparkle, startup rainbow), with the latest
+    event replacing the previous one. Our idle (breathing blue + RSSI meter) and running green
+    stay, by the user's choice. The lap chase flash was dropped (RH: none).
+  - `RaceControl::stop()` calls `LedStrip::stop()`, which also ends staging. Without it the
+    strip's own staging flag outlived a cancelled countdown.
 
 ## Desktop app stream
 

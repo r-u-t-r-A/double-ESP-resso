@@ -4,7 +4,8 @@ You can start a race with a button on your radio, so you don't have to press
 *Start Race* on a laptop and then rush to put on your goggles.
 
 - **Short press** (under 1 s): starts the race countdown. You hear "Arm your
-  quad / Starting on the tone in less than five", then the tone 1–5 s later.
+  quad", then three staging tones 1 s apart, then the start tone 0.5–4 s
+  after the last one (RotorHazard's default staging).
 - **Long press** (hold for 1 s): stops the race, or cancels the countdown.
 
 The AP node buzzer chirps when it recognises a press.
@@ -80,8 +81,8 @@ won't start. Fix it by choosing ▲ or inverting the mix in step 2.
 
 1. With the web UI open on the **Race** tab and voice enabled (see
    [VOICE.md](VOICE.md)), short-press the button on the radio.
-2. The AP buzzer chirps and the gate turns red. The browser says "Arm your quad
-   …", and the tone follows.
+2. The AP buzzer chirps and the gate turns orange. The browser says "Arm your
+   quad", and the staging tones and start tone follow.
 3. Hold the button for 1 s. The race stops and the browser says "Race stopped".
 
 The web UI's *Start Race* button uses exactly the same countdown on the timer,

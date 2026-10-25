@@ -107,6 +107,9 @@
 // tone arrives later than the AP node's buzzer, so play only one of them.
 #define START_TONE_BUZZER 0
 #define START_TONE_BROWSER 1
+// RotorHazard's tone lengths: each staging tone, and the start tone.
+#define STAGE_TONE_MS 100
+#define START_TONE_MS 700
 
 #define EEPROM_CHECK_TIME_MS 1000
 

@@ -5,10 +5,12 @@ Speech API, wrapped by `ap-node/data/articulate.min.js`). Nothing is synthesised
 on the ESP32. The start tone is separate from voice. The **Start tone**
 setting on the Config tab picks where it plays:
 
-- **AP node buzzer** (the default): the buzzer on the AP node's D8 sounds
-  exactly when the timer starts. The browser plays no tone.
-- **Browser**: Web Audio in the browser, which arrives a little later over
-  Wi-Fi. It plays even when voice is broken.
+- **AP node buzzer** (the default): the buzzer on the AP node's D8 plays the
+  three staging tones and the start tone, exactly on time. The browser plays
+  no tones.
+- **Browser**: Web Audio in the browser (RotorHazard's 440 Hz staging and
+  880 Hz start tones), which arrives a little later over Wi-Fi. It plays even
+  when voice is broken.
 
 Only one of them plays. Voice callouts ("Arm your quad", lap times) are not
 affected by this setting.

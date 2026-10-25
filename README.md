@@ -150,22 +150,36 @@ tools/rssi_log.py --plot pass.csv
 
 ## Gate lights
 
-With a WS2812B strip fitted, the gate shows the race state. States higher in
-the table take priority.
+With a WS2812B strip fitted, the gate shows the race state. Race events use
+[RotorHazard](https://github.com/RotorHazard/RotorHazard)'s default LED
+effects and colours, and the newest event replaces the previous one. States
+higher in the table take priority.
 
 | State | Lights |
 |-------|--------|
 | RF node link down or RF error | Purple blink |
-| Lap recorded | Three white segments chase around the ring (0.6 s) |
-| Race start (tone) | Bright green flash (1 s) |
-| Start countdown ("Arm your quad") | Pulsing red. Times out after 15 s if the start never comes. |
-| Race running | Green. White while the drone is inside the gate (RSSI ≥ Enter). |
+| Power-up | Rainbow cycle (5 s) |
+| Race stopped (also a cancelled countdown) | Solid red (4 s), then idle |
+| Race start (tone) | Solid green (4 s) |
+| Drone enters the gate while racing | Blue sparkle over green, fading out over about 20 s |
+| Staging ("Arm your quad" and the staging tones) | Orange, two LEDs on and one off. Times out after 15 s if the start never comes. |
+| Race running | Green |
 | Idle | Breathing blue, plus an RSSI level meter that fills from *Exit* to *Enter* (useful for calibration) |
 | Low battery | Short amber blip every 2 s, over any state |
 
-The start countdown itself still runs in the browser. *Start Race* posts
-`/timer/arm`, and the gate turns green when the page posts `/timer/start` at
-the tone.
+### Start sequence
+
+The start follows RotorHazard's default race format, and the AP node runs it
+for both the web *Start Race* button and the radio button:
+
+1. The gate turns orange and the browser says "Arm your quad".
+2. Three short staging tones, 1 s apart.
+3. A random 0.5–4 s pause after the last staging tone.
+4. The start tone (700 ms). The timer starts and the gate turns green.
+
+*Start tone* on the Config tab picks where the tones play: the AP node's
+buzzer, or the browser (440 Hz staging and 880 Hz start tones, as in
+RotorHazard). Only one of them plays.
 
 ## How the RF node measures RSSI
 

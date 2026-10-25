@@ -78,14 +78,15 @@ we build on ESP-IDF 6.0.2, whose PHY library may differ.
 
 - [ ] Power the strip from its own 5 V supply. The idle state shows breathing blue.
 - [ ] Set the LED count in the web UI. The whole ring lights, with no stale pixels past the end.
-- [ ] Select the strip's **LED chip** and **colour order**. Idle shows pure blue, and the countdown shows pure red.
+- [ ] Select the strip's **LED chip** and **colour order**. Idle shows pure blue, staging shows orange (two on, one off), and a stop shows pure red.
 - [ ] With a phone streaming the Calibration tab (heavy Wi-Fi traffic), the ring shows no flicker or wrong-colour pixels toward its far end. That would mean RMT underruns.
-- [ ] Press *Start Race*: the gate pulses red during the countdown and flashes green at the tone.
-- [ ] Stop a countdown before the tone (web *Stop Race*, or a long press on the radio). The gate goes straight back to idle blue.
-- [ ] *Start tone* = *AP node buzzer*: only the buzzer sounds at the start, and voice still speaks. *Browser*: only the browser tone sounds.
+- [ ] Power-up: a 5 s rainbow, then idle blue.
+- [ ] Press *Start Race*: "Arm your quad" with the gate orange, three staging tones 1 s apart, then 0.5–4 s later the long start tone with the gate solid green for 4 s, then running green.
+- [ ] Stop a countdown before the start tone (web *Stop Race*, or a long press on the radio). The gate shows red for 4 s, then idle blue.
+- [ ] *Start tone* = *AP node buzzer*: only the buzzer plays the staging and start tones, and voice still speaks. *Browser*: only the browser plays them.
 - [ ] Carry a VTX through the gate:
   - [ ] Idle: the meter fills.
-  - [ ] Race running: the ring turns white while inside, and the lap chase plays.
+  - [ ] Race running: entering the gate starts a blue sparkle over the green.
 - [ ] Unplug the RF node: the gate blinks purple within about 3 s.
 - [ ] Repeat the desense check from §3 with the strip lit at the chosen brightness.
 

@@ -40,7 +40,6 @@ static void handleGateLights(uint32_t currentTimeMs) {
     ledStrip.configure(config.getLedEnabled(), config.getLedCount(), config.getLedBrightness(), config.getLedType(), config.getLedOrder());
     ledstrip_inputs_t in = {};
     in.running = timer.isRunning();
-    in.lapSerial = timer.getLapSerial();
     in.rssi = timer.getRssi();
     in.enterRssi = config.getEnterRssi();
     in.exitRssi = config.getExitRssi();
@@ -110,7 +109,7 @@ void setup() {
     ws.init(&config, &timer, &monitor, &buzzer, &led);
 #ifdef C5VRX_LINK
     ws.setRssiSource(&rx);
-    race.init(&config, &timer);
+    race.init(&config, &timer, &buzzer);
     ws.setRaceControl(&race);
 #endif
 #ifdef PIN_LED_STRIP

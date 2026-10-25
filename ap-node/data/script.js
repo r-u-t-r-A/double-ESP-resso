@@ -398,6 +398,27 @@ function beep(duration, frequency, type) {
   }, duration);
 }
 
+// Race tones as RotorHazard plays them: a triangle wave that holds for
+// durationMs, then fades out exponentially over fadeS seconds.
+var toneCtx = null;
+function playTone(durationMs, frequency, fadeS) {
+  if (!toneCtx) toneCtx = new AudioContext();
+  if (toneCtx.state === "suspended") toneCtx.resume();
+  const osc = toneCtx.createOscillator();
+  const gain = toneCtx.createGain();
+  osc.type = "triangle";
+  osc.frequency.value = frequency;
+  osc.connect(gain);
+  gain.connect(toneCtx.destination);
+  const t0 = toneCtx.currentTime;
+  const fadeAt = t0 + durationMs / 1000;
+  gain.gain.setValueAtTime(1, t0);
+  gain.gain.setValueAtTime(1, fadeAt);
+  gain.gain.exponentialRampToValueAtTime(0.00001, fadeAt + fadeS);
+  osc.start(t0);
+  osc.stop(fadeAt + fadeS);
+}
+
 function addLap(lapStr) {
   const pilotName = pilotNameInput.value;
   var last2lapStr = "";
@@ -544,6 +565,8 @@ function doSpeak(obj) {
 
 async function startRace() {
   startRaceButton.disabled = true;
+  // Create the tone context on this click: browsers only allow audio after a gesture.
+  if (raceCtl && startTone == 1 && !toneCtx) toneCtx = new AudioContext();
   if (raceCtl) {
     // The AP node runs the countdown and reports it through raceArm/raceStart.
     fetch("/timer/begin", { method: "POST" }).catch(() => {
@@ -654,18 +677,20 @@ if (!!window.EventSource) {
     false
   );
 
+  // Staging as in RotorHazard: "Arm your quad", three staging tones 1 s
+  // apart (raceTone), then the start tone 0.5-4 s after the last one.
   source.addEventListener("raceArm", function (e) {
     startRaceButton.disabled = true;
     stopRaceButton.disabled = false;
     queueSpeak("<p>Arm your quad</p>");
-    queueSpeak("<p>Starting on the tone in less than five</p>");
+  });
+
+  source.addEventListener("raceTone", function (e) {
+    if (startTone == 1) playTone(100, 440, 1);
   });
 
   source.addEventListener("raceStart", function (e) {
-    if (startTone == 1) {
-      beep(1, 1, "square"); // needed for some reason to make sure we fire the first beep
-      beep(500, 880, "square");
-    }
+    if (startTone == 1) playTone(700, 880, 0.25);
     startTimerDisplay();
     startRaceButton.disabled = true;
     stopRaceButton.disabled = false;

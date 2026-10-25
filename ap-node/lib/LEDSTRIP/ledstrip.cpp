@@ -3,6 +3,12 @@
 #include "debug.h"
 
 static const uint32_t COLOR_OFF = 0;
+// RotorHazard ColorVal and seat colour values.
+static const uint32_t RH_ORANGE = 0xFF8000;  // race staging
+static const uint32_t RH_GREEN = 0x00FF00;   // race start
+static const uint32_t RH_RED = 0xFF0000;     // race stop
+static const uint32_t RH_SEAT1 = 0x0022FF;   // seat 1 (blue), gate entrance
+static const uint32_t COLOR_RUNNING = 0x00C800;
 
 // Adafruit buffer layout for each ledstrip_order_e.
 static const neoPixelType NEO_ORDERS[LEDSTRIP_ORDER_COUNT] = {NEO_GRB, NEO_RGB, NEO_BRG, NEO_RBG, NEO_GBR, NEO_BGR};
@@ -78,13 +84,13 @@ void LedStrip::show() {
 
 void LedStrip::arm(uint32_t currentTimeMs) {
     armTimeMs = currentTimeMs;
-    disarmRequested = false;
+    stopRequested = false;
     armRequested = true;
 }
 
-void LedStrip::disarm() {
+void LedStrip::stop() {
     armRequested = false;
-    disarmRequested = true;
+    stopRequested = true;
 }
 
 uint8_t LedStrip::wave(uint32_t now, uint32_t periodMs, uint8_t lo, uint8_t hi) {
@@ -117,24 +123,78 @@ void LedStrip::renderIdle(uint32_t now, const ledstrip_inputs_t &in) {
     }
 }
 
-void LedStrip::renderRunning(const ledstrip_inputs_t &in) {
-    if (in.rssi >= in.enterRssi) {
-        fill(Adafruit_NeoPixel::Color(255, 255, 255));  // drone in the gate
-    } else {
-        fill(Adafruit_NeoPixel::Color(0, 200, 0));
+void LedStrip::renderStaging() {
+    // RH "Pattern 2-1": two pixels on, one off, around the ring.
+    for (uint16_t i = 0; i < count; ++i) strip.setPixelColor(i, (i % 3) < 2 ? RH_ORANGE : COLOR_OFF);
+}
+
+uint32_t LedStrip::colorWheel(uint8_t pos) {
+    if (pos < 85) return Adafruit_NeoPixel::Color(pos * 3, 255 - pos * 3, 0);
+    if (pos < 170) {
+        pos -= 85;
+        return Adafruit_NeoPixel::Color(255 - pos * 3, 0, pos * 3);
+    }
+    pos -= 170;
+    return Adafruit_NeoPixel::Color(0, pos * 3, 255 - pos * 3);
+}
+
+void LedStrip::renderRainbow(uint32_t now) {
+    // RH "rainbowCycle": the whole wheel spread over the ring, rotating.
+    uint8_t j = (uint8_t)(now / LEDSTRIP_RAINBOW_STEP_MS);
+    for (uint16_t i = 0; i < count; ++i)
+        strip.setPixelColor(i, colorWheel((uint8_t)(i * 256u / count + j)));
+}
+
+void LedStrip::stepSparkle(uint32_t now) {
+    while ((now - sparkleStepMs) >= LEDSTRIP_SPARKLE_STEP_MS) {
+        sparkleStepMs += LEDSTRIP_SPARKLE_STEP_MS;
+        for (uint16_t i = 0; i < count; ++i) sparkle[i] = (uint8_t)(sparkle[i] * LEDSTRIP_SPARKLE_DECAY_PCT / 100u);
+        if (sparkleSteps < LEDSTRIP_SPARKLE_STEPS) {
+            ++sparkleSteps;
+            // Each pixel lights with chance 1/count: about one new one per step.
+            for (uint16_t i = 0; i < count; ++i)
+                if (random(count) == 0) sparkle[i] = 255;
+        }
     }
 }
 
-void LedStrip::renderLapFlash(uint32_t elapsed) {
-    // Three white chase segments sweeping around the ring over the flash.
-    fill(Adafruit_NeoPixel::Color(0, 120, 0));
-    if (count == 0) return;
-    uint16_t seg = count / 6 + 1;
-    uint16_t head = (uint16_t)((uint32_t)count * elapsed / LEDSTRIP_LAP_FLASH_MS);
-    for (uint16_t k = 0; k < 3; ++k) {
-        uint16_t base = (uint16_t)(head + k * count / 3);
-        for (uint16_t i = 0; i < seg; ++i)
-            strip.setPixelColor((base + i) % count, Adafruit_NeoPixel::Color(255, 255, 255));
+void LedStrip::renderSparkle() {
+    // Seat-colour sparkle added over the running green.
+    fill(COLOR_RUNNING);
+    for (uint16_t i = 0; i < count; ++i) {
+        if (!sparkle[i]) continue;
+        uint32_t l = sparkle[i];
+        uint8_t g = (uint8_t)(((RH_SEAT1 >> 8) & 0xFF) * l / 255u);
+        uint8_t b = (uint8_t)((RH_SEAT1 & 0xFF) * l / 255u);
+        strip.setPixelColor(i, Adafruit_NeoPixel::Color(0, g > 200 ? g : 200, b));
+    }
+}
+
+void LedStrip::startEffect(effect_e fx, uint32_t now) {
+    effect = fx;
+    effectMs = now;
+    if (fx == FX_SPARKLE) {
+        memset(sparkle, 0, sizeof(sparkle));
+        sparkleSteps = 0;
+        sparkleStepMs = now;
+    }
+}
+
+bool LedStrip::effectActive(uint32_t now) {
+    switch (effect) {
+        case FX_STARTUP:
+            return (now - effectMs) < LEDSTRIP_STARTUP_MS;
+        case FX_START:
+        case FX_STOP:
+            return (now - effectMs) < LEDSTRIP_EVENT_MS;
+        case FX_SPARKLE: {
+            if (sparkleSteps < LEDSTRIP_SPARKLE_STEPS) return true;
+            for (uint16_t i = 0; i < count; ++i)
+                if (sparkle[i]) return true;
+            return false;
+        }
+        default:
+            return false;
     }
 }
 
@@ -142,29 +202,36 @@ void LedStrip::handleLedStrip(uint32_t now, const ledstrip_inputs_t &in) {
     if (!ready || (now - lastFrameMs) < LEDSTRIP_FRAME_MS) return;
     lastFrameMs = now;
 
-    // Track state transitions even while dark, so re-enabling shows the
-    // right thing immediately.
+    // Track race events even while dark, so re-enabling shows the right
+    // thing immediately. Each event replaces the current effect.
+    if (!startupDone) {
+        startupDone = true;
+        startEffect(FX_STARTUP, now);
+    }
     if (armRequested) {
         armRequested = false;
         arming = true;
+        effect = FX_NONE;
     }
-    if (disarmRequested) {
-        disarmRequested = false;
+    if (stopRequested) {
+        stopRequested = false;
         arming = false;
+        startEffect(FX_STOP, now);
     }
     if (arming && (in.running || (now - armTimeMs) > LEDSTRIP_ARM_TIMEOUT_MS)) {
         arming = false;
     }
-    if (in.running && !wasRunning) {
-        startFlashMs = now;
-        lastLapSerial = in.lapSerial;
-    }
-    if (!in.running) startFlashMs = 0;
+    if (in.running && !wasRunning) startEffect(FX_START, now);
     wasRunning = in.running;
-    if (in.lapSerial != lastLapSerial) {
-        lastLapSerial = in.lapSerial;
-        lapFlashMs = now;
+    // Gate entrance: RSSI reaches Enter, re-armed once it falls below Exit.
+    if (!in.running || in.rssi < in.exitRssi) {
+        inGate = false;
+    } else if (!inGate && in.rssi >= in.enterRssi) {
+        inGate = true;
+        startEffect(FX_SPARKLE, now);
     }
+    if (effect == FX_SPARKLE) stepSparkle(now);
+    if (effect != FX_NONE && !effectActive(now)) effect = FX_NONE;
 
     if (!enabled || count == 0) {
         if (!wasDark) {
@@ -176,22 +243,24 @@ void LedStrip::handleLedStrip(uint32_t now, const ledstrip_inputs_t &in) {
     }
     wasDark = false;
 
-    // Adafruit_NeoPixel applies brightness when pixels are set, so choose it
+    // Adafruit_NeoPixel applies brightness when pixels are set, so set it
     // before rendering the frame.
-    bool startFlash = startFlashMs && (now - startFlashMs) < LEDSTRIP_START_FLASH_MS;
-    uint16_t level = startFlash ? (uint16_t)brightness * 2u : brightness;
-    strip.setBrightness(level > 255u ? 255u : (uint8_t)level);
+    strip.setBrightness(brightness);
 
     if (in.rfFault) {
         fill(((now / 500) & 1) ? Adafruit_NeoPixel::Color(160, 0, 255) : COLOR_OFF);
-    } else if (lapFlashMs && (now - lapFlashMs) < LEDSTRIP_LAP_FLASH_MS) {
-        renderLapFlash(now - lapFlashMs);
-    } else if (startFlash) {
-        fill(Adafruit_NeoPixel::Color(0, 255, 0));
+    } else if (effect == FX_STARTUP) {
+        renderRainbow(now);
+    } else if (effect == FX_STOP) {
+        fill(RH_RED);
+    } else if (effect == FX_START) {
+        fill(RH_GREEN);
+    } else if (effect == FX_SPARKLE) {
+        renderSparkle();
     } else if (arming) {
-        fill(Adafruit_NeoPixel::Color(wave(now, 600, 60, 255), 0, 0));
+        renderStaging();
     } else if (in.running) {
-        renderRunning(in);
+        fill(COLOR_RUNNING);
     } else {
         renderIdle(now, in);
     }

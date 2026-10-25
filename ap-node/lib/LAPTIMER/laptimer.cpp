@@ -23,7 +23,7 @@ void LapTimer::start() {
     raceStartTimeMs = millis();
     state = RUNNING;
 #ifdef C5VRX_LINK
-    if (conf->getStartTone() == START_TONE_BUZZER) buz->beep(500);
+    if (conf->getStartTone() == START_TONE_BUZZER) buz->beep(START_TONE_MS);
 #else
     buz->beep(500);
 #endif

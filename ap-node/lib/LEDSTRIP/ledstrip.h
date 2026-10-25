@@ -9,13 +9,16 @@
  * because the library's IDF 5 backend ignores the 400 kHz flag and uses one
  * RMT memory block, which Wi-Fi interrupt latency can underrun.
  *
- * Priority, highest first:
+ * Race events use RotorHazard's default LED effects and colours; the latest
+ * event replaces the previous one, as in RotorHazard. Priority, highest first:
  *   disabled                   -> dark
  *   RF link down / RF error    -> purple blink
- *   lap just recorded          -> white chase flash
- *   race start                 -> bright green flash, then running
- *   arming (web countdown)     -> pulsing red
- *   running                    -> green, white while the drone is crossing
+ *   power-up                   -> rainbow cycle (RH "Server Startup")
+ *   race stop                  -> solid red for 4 s (RH "Race Stop")
+ *   race start                 -> solid green for 4 s (RH "Race Start")
+ *   gate entry while racing    -> seat-1 blue sparkle over green (RH "Gate Entrance")
+ *   staging                    -> orange, two on / one off (RH "Race Staging")
+ *   running                    -> green
  *   idle                       -> breathing blue plus an RSSI level meter
  *   low battery                -> short amber blip every 2 s over any state
  */
@@ -28,12 +31,15 @@
 #define LEDSTRIP_MAX_LEDS 300
 #define LEDSTRIP_FRAME_MS 20
 #define LEDSTRIP_ARM_TIMEOUT_MS 15000
-#define LEDSTRIP_START_FLASH_MS 1000
-#define LEDSTRIP_LAP_FLASH_MS 600
+#define LEDSTRIP_STARTUP_MS 5000
+#define LEDSTRIP_EVENT_MS 4000         // RH "Solid" effect hold (start, stop)
+#define LEDSTRIP_RAINBOW_STEP_MS 10    // one colour-wheel step
+#define LEDSTRIP_SPARKLE_STEP_MS 100   // RH sparkle defaults: 100 steps of 100 ms,
+#define LEDSTRIP_SPARKLE_STEPS 100     // ~1 new pixel per step, 5 % decay per step
+#define LEDSTRIP_SPARKLE_DECAY_PCT 95
 
 typedef struct {
     bool running;           // LapTimer RUNNING
-    uint32_t lapSerial;     // increments on every recorded lap
     uint8_t rssi;           // filtered RSSI 0-255
     uint8_t enterRssi;
     uint8_t exitRssi;
@@ -47,10 +53,10 @@ class LedStrip {
     // Applies config; safe to call every frame (cheap when unchanged).
     // chip is a ledstrip_chip_e, order a ledstrip_order_e.
     void configure(bool enabled, uint16_t count, uint8_t brightness, uint8_t chip, uint8_t order);
-    // Web countdown started ("Arm your quad"): red until start or timeout.
+    // Race staging: orange until the start, a stop, or a timeout.
     void arm(uint32_t currentTimeMs);
-    // Countdown cancelled before the start: back to idle now.
-    void disarm();
+    // Race stopped or staging cancelled: red, then idle.
+    void stop();
     void handleLedStrip(uint32_t currentTimeMs, const ledstrip_inputs_t &in);
 
    private:
@@ -68,20 +74,37 @@ class LedStrip {
     uint32_t symbolCapacity = 0;
     uint32_t lastShowUs = 0;
 
+    typedef enum {
+        FX_NONE,
+        FX_STARTUP,
+        FX_START,
+        FX_STOP,
+        FX_SPARKLE,
+    } effect_e;
+
     volatile bool armRequested = false;
-    volatile bool disarmRequested = false;
+    volatile bool stopRequested = false;
     volatile uint32_t armTimeMs = 0;
     bool arming = false;
     bool wasRunning = false;
-    uint32_t startFlashMs = 0;
-    uint32_t lastLapSerial = 0;
-    uint32_t lapFlashMs = 0;
+    bool inGate = false;
+    bool startupDone = false;
+    effect_e effect = FX_NONE;
+    uint32_t effectMs = 0;
     uint32_t lastFrameMs = 0;
+    uint8_t sparkle[LEDSTRIP_MAX_LEDS];  // per-pixel sparkle level
+    uint16_t sparkleSteps = 0;
+    uint32_t sparkleStepMs = 0;
 
     void show();
     void fill(uint32_t color);
+    void startEffect(effect_e fx, uint32_t now);
+    bool effectActive(uint32_t now);
+    void stepSparkle(uint32_t now);
     void renderIdle(uint32_t now, const ledstrip_inputs_t &in);
-    void renderRunning(const ledstrip_inputs_t &in);
-    void renderLapFlash(uint32_t elapsed);
+    void renderStaging();
+    void renderRainbow(uint32_t now);
+    void renderSparkle();
+    static uint32_t colorWheel(uint8_t pos);
     static uint8_t wave(uint32_t now, uint32_t periodMs, uint8_t lo, uint8_t hi);
 };
