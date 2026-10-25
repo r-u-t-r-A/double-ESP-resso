@@ -16,7 +16,7 @@ boards** and no RX5808 module.
 
 ```
  drone VTX ~~ 5.8 GHz ~~>  [ RF node  XIAO ESP32-C5 ]  raw I/Q -> band power -> RSSI 0-255 @ 1 kHz
-                                 |  D5/D9 UART, both directions
+                                 |  D1/D5 UART, both directions
                            [ AP node  XIAO ESP32-C5 ]  PhobosLT lap logic + web UI
  phone / laptop <~~ 2.4 GHz Wi-Fi AP "PhobosLT_xxxxxx" ~~
 ```
@@ -51,12 +51,12 @@ Every frequency is tuned the same way: the PLL is set directly, with the LO
 
 - 2 × Seeed Studio XIAO ESP32-C5.
 - Optional:
-  - A buzzer on the AP node's D8.
+  - A buzzer on the AP node's D0.
   - A 1S battery on the AP node's battery pads.
-  - A **WS2812B strip around the gate** on the AP node's D4, with its own
-    5 V supply. See [docs/hardware.md](docs/hardware.md#ws2812b-gate-led-strip-ap-node-d4).
+  - A **WS2812B strip around the gate** on the AP node's D2, with its own
+    5 V supply. See [docs/hardware.md](docs/hardware.md#ws2812b-gate-led-strip-ap-node-d2).
 
-**Join only these four pins between the boards:** 5V, GND, D5 and D9. D2/D3
+**Join only these four pins between the boards:** 5V, GND, D1 and D5. D2/D3
 are strapping pins and D6/D7 carry the UART0 console, so a full pin-to-pin
 stack is not safe. See
 [docs/hardware.md](docs/hardware.md).

@@ -19,9 +19,10 @@
 */
 
 //double-ESP-resso: Seeed XIAO ESP32-C5 stacked on the RF node XIAO.
-//Only 5V, GND, D5 and D9 are joined; the RF node drives its IQ bus on D0-D3/D10.
-//D6/D7 (GPIO11/12) are the C5 UART0 console pins: the core's log output is
-//driven out on GPIO11, so they cannot carry the link.
+//Only 5V, GND, D1 and D5 are joined between the boards. D8-D10 are the XIAO's
+//SPI pins and carry the SD card. D6/D7 (GPIO11/12) are the C5 UART0 console
+//pins: the core's log output is driven out on GPIO11, so they cannot carry the
+//link. D2/D3 are strapping pins.
 #if defined(C5VRX_LINK)
 
 #define PIN_LED 27            //XIAO user LED, active low
@@ -31,9 +32,9 @@
 #define VBAT_SCALE 2
 #define VBAT_ADD 2
 #define PIN_C5LINK_RX 24      //D5 <- RF node TX
-#define PIN_C5LINK_TX 9       //D9 -> RF node RX
-#define PIN_BUZZER 8          //D8
-#define PIN_LED_STRIP 25      //D4, WS2812B data (330R series resistor)
+#define PIN_C5LINK_TX 0       //D1 -> RF node RX
+#define PIN_BUZZER 1          //D0
+#define PIN_LED_STRIP 25      //D2, WS2812B data (330R series resistor)
 #define BUZZER_INVERTED false
 #define DEFAULT_FREQUENCY 5658 //R1
 #define DEFAULT_RF_GAIN 35

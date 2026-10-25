@@ -44,7 +44,8 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
   (R1/R3/R6/R7 matter) from the PhobosLT web UI.
   - The AP node owns the config and resends `F`/`G` until the RF node's `S`
     status matches.
-- **Only 5V, GND, D5 and D9 are joined between the boards.**
+- **Only 5V, GND, D1 and D5 are joined between the boards** (D9 until 2026-10-25; it moved
+  so the AP node's SD card could take the XIAO SPI pins D8-D10, and the buzzer moved D8 -> D0).
   - Not D6/D7: GPIO11/12 are the C5 UART0 console pins. Both chips' ROM
     boot logs and the Arduino core's console are driven out on GPIO11, which
     garbled the link (found on hardware 2026-09-30).
@@ -58,7 +59,7 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
 
 ## Gate LEDs
 
-- WS2812B / WS2812 / WS2811 (800 or 400 kHz) strip on the AP node's D4 (GPIO23), driven by
+- WS2812B / WS2812 / WS2811 (800 or 400 kHz) strip on the AP node's D2 (GPIO25), driven by
   `lib/LEDSTRIP` from `parallelTask`. The chip and colour order are set in the web UI (config v4).
   - Adafruit NeoPixel only renders the pixel buffer. Frames go out through our own RMT encoder
     (`ledstrip_timing.h`, 100 ns ticks, two memory blocks).

@@ -142,7 +142,7 @@ Console commands (for when USB works):
 
 ## 3. Stack and run
 
-1. Join only **5V, GND, D5 and D9** between the boards (see `docs/hardware.md`).
+1. Join only **5V, GND, D1 and D5** between the boards (see `docs/hardware.md`).
 2. Power the stack from **one** USB cable, or from the battery.
 3. Open `http://20.0.0.1`. Within about a second the *RF node* line changes to
    `OK 5658 MHz gain 40 …`.
@@ -179,7 +179,7 @@ Continue with `docs/bring-up.md` for the hardware checks.
   `uploadfs` step again.
 - **RF node shows `DOWN` in the web UI:**
   - **UART wiring:** the roles are crossed **in firmware**, so do **not**
-    cross the wires. Connect D5 to D5 and D9 to D9, straight through, the same
+    cross the wires. Connect D5 to D5 and D1 to D1, straight through, the same
     way stacked headers line up.
   - **RF node firmware:** check it on its own over USB (`s` must reply
     `STATUS,…`).

@@ -16,25 +16,31 @@ The RF node:
 | Pins | Use |
 |------|-----|
 | D5 (GPIO24) | UART TX to the AP node |
-| D9 (GPIO9) | UART RX from the AP node |
+| D1 (GPIO0) | UART RX from the AP node |
 
 The AP node:
 
 | Pins | Use |
 |------|-----|
 | D5 (GPIO24) | UART RX from the RF node |
-| D9 (GPIO9) | UART TX to the RF node |
-| D8 (GPIO8) | Optional buzzer |
+| D1 (GPIO0) | UART TX to the RF node |
+| D0 (GPIO1) | Optional buzzer |
+| D2 (GPIO25) | Optional WS2812B gate LED strip |
 | GPIO27 | User LED |
 | GPIO6 / GPIO26 | Battery sense ADC / divider enable |
 
-## Stacking rule: join 5V, GND, D5 and D9 only
+Until 2026-10-25 the link used D9 and the buzzer D8. They moved to free the
+XIAO's SPI pins (D8-D10) for an SD card: rewire older stacks, and flash both
+boards.
+
+## Stacking rule: join 5V, GND, D1 and D5 only
 
 When XIAO boards are stacked, each pin meets the same pin on the other board.
 Joining **all** pins is not safe:
 
 - D2 (GPIO25) and D3 (GPIO7) are ESP32-C5 strapping pins. If one board
   drives them while the other resets, that board can boot in the wrong mode.
+- **Do not join D9** any more: on the AP node it is kept for an SD card.
 - Up to firmware 1 the RF node drove a 40–80 MHz IQ bus on D0–D3 and D10.
   The current RF node reads I/Q from on-chip SRAM and drives no other pins,
   but an older RF node build must not be stacked on a full header.
@@ -44,12 +50,12 @@ pins. Both chips' ROM boot logs, and the AP node's whole Arduino console, are
 driven out on GPIO11. On the first hardware test this fought the RF node's
 transmitter, and every link line arrived garbled.
 
-Fit header pins only at **5V, GND, D5 and D9**, or wire those four pins
+Fit header pins only at **5V, GND, D1 and D5**, or wire those four pins
 directly. Because the pins meet pin-to-pin, the UART roles cross in firmware:
 
 ```
 RF node D5 (TX) ─────── D5 (RX) AP node
-RF node D9 (RX) ─────── D9 (TX) AP node
+RF node D1 (RX) ─────── D1 (TX) AP node
 RF node 5V      ─────── 5V      AP node
 RF node GND     ─────── GND     AP node
 ```
@@ -76,10 +82,10 @@ One USB-C cable or a battery powers both boards through the 5V link.
   firmware drives GPIO26 high and assumes a 1:2 divider.
 - Whether the XIAO user LED is active-low. The firmware assumes it is.
 
-## WS2812B gate LED strip (AP node, D4)
+## WS2812B gate LED strip (AP node, D2)
 
-The AP node drives a single-wire RGB strip around the gate on **D4 (GPIO23)**.
-D4 is not joined to the RF node.
+The AP node drives a single-wire RGB strip around the gate on **D2 (GPIO25)**.
+D2 is not joined to the RF node.
 
 Supported chips, selected in the web UI (Configuration tab, **LED chip** and
 **LED colour order**):
@@ -102,7 +108,7 @@ for the strip and keep the common ground.
 5 V supply (+) ──┬───────────────────── strip +5V
                  └─ 1000 µF ─┐
 5 V supply (−) ──┴───────────┴───────── strip GND ── AP node GND
-AP node D4 ── 330 Ω ─────────────────── strip DIN
+AP node D2 ── 330 Ω ─────────────────── strip DIN
 ```
 
 - **Power the strip from its own 5 V supply**, for example a buck converter
