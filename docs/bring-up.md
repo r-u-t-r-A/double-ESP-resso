@@ -76,13 +76,13 @@ we build on ESP-IDF 6.0.2, whose PHY library may differ.
 
 ## 4. Gate LED strip
 
-- [ ] Power the strip from its own 5 V supply. The idle state shows breathing blue.
+- [ ] Power the strip from its own 5 V supply. The idle state shows bouncing balls.
 - [ ] Set the LED count in the web UI. The whole ring lights, with no stale pixels past the end.
-- [ ] Select the strip's **LED chip** and **colour order**. Idle shows pure blue, staging shows orange (two on, one off), and a stop shows pure red.
+- [ ] Select the strip's **LED chip** and **colour order**. Staging shows orange (two on, one off), and a stop shows pure red.
 - [ ] With a phone streaming the Calibration tab (heavy Wi-Fi traffic), the ring shows no flicker or wrong-colour pixels toward its far end. That would mean RMT underruns.
-- [ ] Power-up: a 5 s rainbow, then idle blue.
+- [ ] Power-up: a 5 s rainbow, then the bouncing balls. They bounce off the first LED (the data-in end); check that is the end you want as the "ground".
 - [ ] Press *Start Race*: "Arm your quad" with the gate orange, three staging tones 1 s apart, then 0.5–4 s later the long start tone with the gate solid green for 4 s, then running green.
-- [ ] Stop a countdown before the start tone (web *Stop Race*, or a long press on the radio). The gate shows red for 4 s, then idle blue.
+- [ ] Stop a countdown before the start tone (web *Stop Race*, or a long press on the radio). The gate shows red for 4 s, then the bouncing balls.
 - [ ] *Start tone* = *AP node buzzer*: only the buzzer plays the staging and start tones, and voice still speaks. *Browser*: only the browser plays them.
 - [ ] Carry a VTX through the gate:
   - [ ] Idle: the meter fills.

@@ -19,7 +19,7 @@
  *   gate entry while racing    -> seat-1 blue sparkle over green (RH "Gate Entrance")
  *   staging                    -> orange, two on / one off (RH "Race Staging")
  *   running                    -> green
- *   idle                       -> breathing blue plus an RSSI level meter
+ *   idle                       -> bouncing balls plus an RSSI level meter
  *   low battery                -> short amber blip every 2 s over any state
  */
 #include <Adafruit_NeoPixel.h>
@@ -37,6 +37,11 @@
 #define LEDSTRIP_SPARKLE_STEP_MS 100   // RH sparkle defaults: 100 steps of 100 ms,
 #define LEDSTRIP_SPARKLE_STEPS 100     // ~1 new pixel per step, 5 % decay per step
 #define LEDSTRIP_SPARKLE_DECAY_PCT 95
+// Idle "bouncing balls" (like WLED's effect, written from scratch): balls fall
+// from the top of the strip onto LED 0 and lose speed at every bounce.
+#define LEDSTRIP_BALLS 4
+#define LEDSTRIP_BALL_GRAVITY 0.31f    // strip lengths per s^2
+#define LEDSTRIP_BALL_RELAUNCH 0.1f    // relaunch below this fraction of the launch speed
 
 typedef struct {
     bool running;           // LapTimer RUNNING
@@ -93,6 +98,13 @@ class LedStrip {
     uint32_t effectMs = 0;
     uint32_t lastFrameMs = 0;
     uint8_t sparkle[LEDSTRIP_MAX_LEDS];  // per-pixel sparkle level
+    struct {
+        float speed;        // upward speed at the last bounce, strip lengths/s
+        float damping;      // speed kept per bounce
+        uint32_t bounceMs;  // time of the last bounce
+    } balls[LEDSTRIP_BALLS];
+    bool ballsReady = false;
+    uint32_t ballsFrameMs = 0;
     uint16_t sparkleSteps = 0;
     uint32_t sparkleStepMs = 0;
 
@@ -102,9 +114,9 @@ class LedStrip {
     bool effectActive(uint32_t now);
     void stepSparkle(uint32_t now);
     void renderIdle(uint32_t now, const ledstrip_inputs_t &in);
+    void renderBouncingBalls(uint32_t now);
     void renderStaging();
     void renderRainbow(uint32_t now);
     void renderSparkle();
     static uint32_t colorWheel(uint8_t pos);
-    static uint8_t wave(uint32_t now, uint32_t periodMs, uint8_t lo, uint8_t hi);
 };

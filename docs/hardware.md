@@ -91,8 +91,9 @@ Supported chips, selected in the web UI (Configuration tab, **LED chip** and
 | WS2811 (800 kHz) | 800 kHz | RGB, but varies by strip | Often 12 V strips where one chip drives a group of 3 LEDs. Set **LED count** to the number of chips, not LEDs. |
 | WS2811 (400 kHz) | 400 kHz | RGB | Only for chips wired for low-speed mode. A 300-chip frame then takes 18 ms. |
 
-If the colours are wrong, set the strip to idle (breathing blue) and change
-**LED colour order** until it really is blue.
+If the colours are wrong, press *Start Race* and then *Stop Race*, and change
+**LED colour order** until staging really is orange (two LEDs on, one off) and
+the stop that follows is pure red for 4 s.
 
 The diagram below is for a 5 V strip. For a 12 V WS2811 strip, use a 12 V supply
 for the strip and keep the common ground.
