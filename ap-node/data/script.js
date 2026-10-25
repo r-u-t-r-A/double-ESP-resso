@@ -7,6 +7,7 @@ const announcerRateInput = document.getElementById("rate");
 const startToneSelect = document.getElementById("startTone");
 const sdLogInput = document.getElementById("sdLog");
 const sdStatusDisplay = document.getElementById("sdstatus");
+const sdCardDisplay = document.getElementById("sdcard");
 const exportLogButton = document.getElementById("exportLogButton");
 const enterRssiInput = document.getElementById("enter");
 const exitRssiInput = document.getElementById("exit");
@@ -161,7 +162,16 @@ function getBatteryVoltage() {
       batteryVoltageDisplay.innerText = batteryVoltage;
       const rfMatch = response.match(/RF Node:\s*([^\n]*)/);
       if (rfNode && rfMatch) rfStatusDisplay.innerText = rfMatch[1];
-      const sdMatch = response.match(/SD Card:\s*([^\n]*)/);
+      const sdCardMatch = response.match(/SD Card:\s*([^\n]*)/);
+      if (sdLog && sdCardMatch) {
+        sdCardDisplay.innerText = sdCardMatch[1];
+        sdCardDisplay.style.color = sdCardMatch[1].startsWith("OK")
+          ? "#2e9e3e"
+          : sdCardMatch[1].startsWith("ERROR")
+            ? "#d33"
+            : "";
+      }
+      const sdMatch = response.match(/SD Logging:\s*([^\n]*)/);
       if (sdLog && sdMatch) sdStatusDisplay.innerText = sdMatch[1];
     });
 }

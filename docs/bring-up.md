@@ -105,11 +105,13 @@ See [RADIO_START.md](RADIO_START.md) for the radio and backpack setup.
 ## 6. SD card logging (AP node)
 
 - [ ] Rewire for the 2026-10-25 pin move: buzzer on AP D0, link joined at **D1** (not D9), and flash both boards. `/status` shows `RF Node: OK …`.
-- [ ] With the card fitted and **Log RSSI to SD card** off, `/status` shows `SD Card: off`. Tick it and save: within about 5 s it shows `logging /rssi_0001_….csv` with the row count climbing at about 1000/s.
+- [ ] Boot with no card: the Config tab's *SD card* field shows `ERROR: no card detected` in red. Insert a FAT32 card: within about 5 s it shows `OK, SDHC/SDXC, … GB free` in green, with logging still off.
+- [ ] An exFAT card (most 64 GB and larger) shows `ERROR: card found … format it as FAT32`.
+- [ ] Tick **Log RSSI to SD card** and save: within about 5 s *SD logging* shows `logging /rssi_0001_….csv` with the row count climbing at about 1000/s.
 - [ ] Note `Heap: Free` on `/status` with logging on. It should stay well above 40 KB.
 - [ ] Log for 10 minutes with the Calibration tab open: `dropped 0`, `errors 0`.
 - [ ] Run a race with laps, then **Export last 15 min**. The CSV opens in a spreadsheet, the `time` column matches the clock, and `start`, `lap` (with `lap_ms`) and `stop` rows appear where expected.
-- [ ] Pull the card while logging: `/status` shows `no card (retrying)`. Put it back: a new numbered file starts.
+- [ ] Pull the card while logging: *SD card* shows `ERROR: no card detected` and *SD logging* `waiting for a card`. Put it back: a new numbered file starts. Pulling it while logging is off is noticed within about 5 s too.
 - [ ] Desense: compare the RF node's noise floor and a gate pass with logging on and off.
 
 ## 7. Field

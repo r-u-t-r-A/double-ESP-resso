@@ -379,9 +379,13 @@ void Webserver::startServices() {
             }
         }
 #endif
+        char sdCardBuf[112] = "n/a";
         char sdBuf[160] = "n/a";
 #ifdef PIN_SD_CS
-        if (sdlog) sdlog->statusString(sdBuf, sizeof(sdBuf));
+        if (sdlog) {
+            sdlog->cardString(sdCardBuf, sizeof(sdCardBuf));
+            sdlog->statusString(sdBuf, sizeof(sdBuf));
+        }
 #endif
         float voltage = (float)monitor->getBatteryVoltage() / 10;
         const char *format =
@@ -408,12 +412,13 @@ RF Node:\t%s\n\
 ELRS Backpack:\t%s\n\
 %s\
 SD Card:\t%s\n\
+SD Logging:\t%s\n\
 Battery Voltage:\t%0.1fv";
 
         snprintf(buf, sizeof(buf), format,
                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getHeapSize(), ESP.getMaxAllocHeap(), LittleFS.usedBytes(), LittleFS.totalBytes(),
                  ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores(), ESP.getSdkVersion(), ESP.getFlashChipSize(), ESP.getFlashChipSpeed() / 1000000, getCpuFrequencyMhz(),
-                 WiFi.localIP().toString().c_str(), WiFi.macAddress().c_str(), configBuf, rfBuf, elrsStatus, elrsDetail, sdBuf, voltage);
+                 WiFi.localIP().toString().c_str(), WiFi.macAddress().c_str(), configBuf, rfBuf, elrsStatus, elrsDetail, sdCardBuf, sdBuf, voltage);
         request->send(200, "text/plain", buf);
         led->on(200);
     });

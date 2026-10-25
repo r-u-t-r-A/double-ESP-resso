@@ -156,8 +156,16 @@ tools/rssi_log.py --plot pass.csv
 
 With a microSD card fitted, tick **Log RSSI to SD card (1 kHz)** on the Config
 tab and save. The AP node then writes every sample the lap timer sees, about
-105 MB per hour, until you untick it. The *SD card* line on the Config tab shows
-the file, row count, free space and any dropped samples.
+105 MB per hour, until you untick it.
+
+Under the checkbox, two fields show the card's state:
+
+- **SD card** is checked every 5 s, whether logging is on or not. It shows `OK`
+  with the card type, size and free space in green. It shows an error in red
+  when no card answers (check the wiring and the card), or when a card answers
+  but can't be read. Use FAT32: cards of 64 GB and up usually come as exFAT.
+- **SD logging** shows the current file, row count, and any dropped samples or
+  write errors.
 
 - One file per logging session, numbered: `rssi_0007_20261025-1802.csv`. The
   date comes from the browser when the page loads; without it the file is just

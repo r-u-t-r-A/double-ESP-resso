@@ -2,6 +2,9 @@
 
 #include <SD.h>
 #include <SPI.h>
+#include <sd_diskio.h>
+
+#include "diskio.h"  // FatFs disk_initialize(), for probing a card that won't mount
 #include <sys/time.h>
 #include <time.h>
 
@@ -9,6 +12,7 @@
 
 static sdlog_sample_t batch[SDLOG_BATCH];
 static char rows[SDLOG_BATCH * SDLOG_ROW_LEN];
+static uint8_t sector[512];  // idle card check
 
 void SdLog::init(uint8_t sck, uint8_t miso, uint8_t mosi, uint8_t cs) {
     pinSck = sck;
@@ -64,6 +68,8 @@ bool SdLog::mount() {
     }
     cardBytes = SD.totalBytes();
     usedBytes = SD.usedBytes();
+    cardKind = SD.cardType();
+    cardState = CARD_READY;
     DEBUG("SD card mounted, %llu MB\n", cardBytes / 1048576ULL);
     return true;
 }
@@ -72,6 +78,25 @@ void SdLog::unmount() {
     closeSession();
     SD.end();
     mounted = false;
+    cardState = CARD_CHECKING;
+}
+
+// SD.begin() fails the same way with no card and with an unformatted one.
+// Initialising the card alone, without mounting, tells them apart.
+void SdLog::probeCard() {
+    uint8_t pdrv = sdcard_init(pinCs, &SPI, SDLOG_SPI_HZ);
+    if (pdrv == 0xFF) {
+        cardState = CARD_ABSENT;
+        return;
+    }
+    DSTATUS st = disk_initialize(pdrv);
+    cardKind = sdcard_type(pdrv);
+    sdcard_uninit(pdrv);
+    cardState = (st & STA_NOINIT) ? CARD_ABSENT : CARD_UNFORMATTED;
+}
+
+bool SdLog::cardResponds() {
+    return SD.readRAW(sector, 0);
 }
 
 uint32_t SdLog::nextSequence() {
@@ -141,19 +166,32 @@ void SdLog::closeSession() {
 void SdLog::run() {
     for (;;) {
         uint32_t now = millis();
-        if (!enabled) {
-            if (sessionOpen) closeSession();
-            sdlog_flush(&ring);
-            vTaskDelay(pdMS_TO_TICKS(100));
-            continue;
-        }
         if (!mounted) {
             if (lastMountTryMs == 0 || (now - lastMountTryMs) >= SDLOG_MOUNT_RETRY_MS) {
                 lastMountTryMs = now;
                 mounted = mount();
-                if (!mounted) DEBUG("SD: no card\n");
+                if (!mounted) {
+                    probeCard();
+                    DEBUG("SD: %s\n", cardState == CARD_UNFORMATTED ? "card has no FAT filesystem" : "no card");
+                }
+                lastCheckMs = now;
             }
             sdlog_flush(&ring);
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+        if (!enabled) {
+            if (sessionOpen) closeSession();
+            sdlog_flush(&ring);
+            // Idle: notice a card being pulled out.
+            if ((now - lastCheckMs) >= SDLOG_MOUNT_RETRY_MS) {
+                lastCheckMs = now;
+                if (!cardResponds()) {
+                    DEBUG("SD: card gone\n");
+                    unmount();
+                    lastMountTryMs = now;
+                }
+            }
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
@@ -183,11 +221,46 @@ void SdLog::run() {
     }
 }
 
+static const char *cardKindName(uint8_t kind) {
+    switch (kind) {
+        case CARD_MMC:
+            return "MMC";
+        case CARD_SD:
+            return "SDSC";
+        case CARD_SDHC:
+            return "SDHC/SDXC";
+        default:
+            return "unknown type";
+    }
+}
+
+void SdLog::cardString(char *buf, size_t len) {
+    switch (cardState) {
+        case CARD_READY: {
+            // usedBytes is read at mount and after each session; count this session's rows on top.
+            uint64_t used = usedBytes + (sessionOpen ? (uint64_t)(sessionRows + 1) * SDLOG_ROW_LEN : 0);
+            uint64_t freeBytes = cardBytes > used ? cardBytes - used : 0;
+            snprintf(buf, len, "OK, %s, %.1f GB, %.1f GB free", cardKindName(cardKind),
+                     (double)cardBytes / 1e9, (double)freeBytes / 1e9);
+            break;
+        }
+        case CARD_UNFORMATTED:
+            snprintf(buf, len, "ERROR: card found (%s) but not readable: format it as FAT32", cardKindName(cardKind));
+            break;
+        case CARD_ABSENT:
+            snprintf(buf, len, "ERROR: no card detected (check wiring and that a card is inserted)");
+            break;
+        default:
+            snprintf(buf, len, "checking...");
+            break;
+    }
+}
+
 void SdLog::statusString(char *buf, size_t len) {
     if (!enabled) {
         snprintf(buf, len, "off");
     } else if (!mounted) {
-        snprintf(buf, len, "no card (retrying), errors %lu", (unsigned long)writeErrors);
+        snprintf(buf, len, "waiting for a card, errors %lu", (unsigned long)writeErrors);
     } else {
         uint32_t freeMb = (uint32_t)((cardBytes - usedBytes) / 1048576ULL);
         snprintf(buf, len, "logging %s, %lu rows, %lu MB free, dropped %lu, errors %lu", sessionOpen ? path : "-",
@@ -198,12 +271,8 @@ void SdLog::statusString(char *buf, size_t len) {
 
 bool SdLog::openExport(uint32_t minutes, Cursor &c, const char **why) {
     if (!mounted) {
-        // Logging may be off: mount just for the export.
-        if (enabled || !mount()) {
-            *why = "no SD card";
-            return false;
-        }
-        mounted = true;
+        *why = "no SD card";
+        return false;
     }
     char p[40];
     bool current = sessionOpen;

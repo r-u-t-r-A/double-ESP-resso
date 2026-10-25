@@ -7,7 +7,9 @@
  * per logging session (/rssi_NNNN[_YYYYMMDD-HHMM].csv), and saves the file
  * every second, so a card stall never blocks lap timing and a power cut
  * loses at most about a second. Logging runs while the "sdLog" config flag
- * is on; the card is mounted when needed and retried if it is missing.
+ * is on. Whether or not it is, the card is mounted at boot, retried every
+ * 5 s while missing, and checked every 5 s while idle, so the web UI can show
+ * whether a card is present and ready.
  *
  * The export reads the last N minutes of the newest file back as a readable
  * CSV with wall-clock times, for the web UI's download button.
@@ -19,7 +21,7 @@
 
 #define SDLOG_SPI_HZ 20000000
 #define SDLOG_SAVE_MS 1000
-#define SDLOG_MOUNT_RETRY_MS 5000
+#define SDLOG_MOUNT_RETRY_MS 5000  // also the idle card check interval
 #define SDLOG_BATCH 256  // rows formatted per write
 
 class SdLog {
@@ -34,7 +36,8 @@ class SdLog {
     // marked on the row where they were first seen.
     void push(uint32_t ms, uint8_t raw, uint8_t filt, bool running, uint32_t lapSerial, uint32_t lastLapMs);
 
-    // One line for /status.
+    // /status lines: the card itself, and the logging session.
+    void cardString(char *buf, size_t len);
     void statusString(char *buf, size_t len);
 
     // Export of the newest log file's last `minutes`.
@@ -57,6 +60,8 @@ class SdLog {
     void run();
     bool mount();
     void unmount();
+    void probeCard();
+    bool cardResponds();
     bool openSession();
     void closeSession();
     uint32_t nextSequence();
@@ -66,6 +71,14 @@ class SdLog {
     uint8_t pinSck = 0, pinMiso = 0, pinMosi = 0, pinCs = 0;
     volatile bool enabled = false;
     volatile bool mounted = false;
+    typedef enum {
+        CARD_CHECKING,
+        CARD_ABSENT,       // nothing answered on the SPI bus
+        CARD_UNFORMATTED,  // a card answered, but has no FAT filesystem
+        CARD_READY,        // mounted
+    } card_state_e;
+    volatile uint8_t cardState = CARD_CHECKING;
+    volatile uint8_t cardKind = 0;  // sdcard_type_t
     sdlog_ring_t ring = {};
 
     // Producer (loop) state for event detection.
@@ -79,6 +92,7 @@ class SdLog {
     uint32_t sessionRows = 0;
     uint32_t writeErrors = 0;
     uint32_t lastMountTryMs = 0;
+    uint32_t lastCheckMs = 0;
     uint32_t lastSaveMs = 0;
     uint64_t cardBytes = 0;
     uint64_t usedBytes = 0;
