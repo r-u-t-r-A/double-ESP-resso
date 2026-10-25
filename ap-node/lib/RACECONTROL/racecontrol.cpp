@@ -30,6 +30,11 @@ void RaceControl::begin(uint32_t currentTimeMs) {
 
 void RaceControl::stop() {
     arming = false;
+#ifdef PIN_LED_STRIP
+    // The strip keeps its own arming state, which only a start or its 15 s
+    // timeout would clear: a countdown cancelled early left the gate red.
+    if (ledStrip) ledStrip->disarm();
+#endif
     timer->stop();
     emit("raceStop", 0);
 }

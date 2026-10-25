@@ -49,6 +49,8 @@ class LedStrip {
     void configure(bool enabled, uint16_t count, uint8_t brightness, uint8_t chip, uint8_t order);
     // Web countdown started ("Arm your quad"): red until start or timeout.
     void arm(uint32_t currentTimeMs);
+    // Countdown cancelled before the start: back to idle now.
+    void disarm();
     void handleLedStrip(uint32_t currentTimeMs, const ledstrip_inputs_t &in);
 
    private:
@@ -67,6 +69,7 @@ class LedStrip {
     uint32_t lastShowUs = 0;
 
     volatile bool armRequested = false;
+    volatile bool disarmRequested = false;
     volatile uint32_t armTimeMs = 0;
     bool arming = false;
     bool wasRunning = false;

@@ -78,7 +78,13 @@ void LedStrip::show() {
 
 void LedStrip::arm(uint32_t currentTimeMs) {
     armTimeMs = currentTimeMs;
+    disarmRequested = false;
     armRequested = true;
+}
+
+void LedStrip::disarm() {
+    armRequested = false;
+    disarmRequested = true;
 }
 
 uint8_t LedStrip::wave(uint32_t now, uint32_t periodMs, uint8_t lo, uint8_t hi) {
@@ -141,6 +147,10 @@ void LedStrip::handleLedStrip(uint32_t now, const ledstrip_inputs_t &in) {
     if (armRequested) {
         armRequested = false;
         arming = true;
+    }
+    if (disarmRequested) {
+        disarmRequested = false;
+        arming = false;
     }
     if (arming && (in.running || (now - armTimeMs) > LEDSTRIP_ARM_TIMEOUT_MS)) {
         arming = false;
