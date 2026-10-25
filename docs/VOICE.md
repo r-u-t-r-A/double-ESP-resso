@@ -2,8 +2,16 @@
 
 The web UI speaks lap times through the browser's own text-to-speech (the Web
 Speech API, wrapped by `ap-node/data/articulate.min.js`). Nothing is synthesised
-on the ESP32. The start tone is different: it is generated with Web Audio, so it
-plays even when voice is broken.
+on the ESP32. The start tone is separate from voice. The **Start tone**
+setting on the Config tab picks where it plays:
+
+- **AP node buzzer** (the default): the buzzer on the AP node's D8 sounds
+  exactly when the timer starts. The browser plays no tone.
+- **Browser**: Web Audio in the browser, which arrives a little later over
+  Wi-Fi. It plays even when voice is broken.
+
+Only one of them plays. Voice callouts ("Arm your quad", lap times) are not
+affected by this setting.
 
 Voice needs two things:
 
@@ -24,7 +32,7 @@ Voice needs two things:
 
 The **Enable voice** setting is not saved. Click it again after every page
 reload, or no announcements are spoken. Until you click it, the start tone is
-the only sound.
+the only sound (from the buzzer or the browser, see above).
 
 ## 2. Fedora Linux, Google Chrome
 
@@ -127,6 +135,7 @@ connected over USB debugging, and run the console commands from section 2.4.
 | Symptom | Cause |
 | --- | --- |
 | Only the start tone, no "Arm your quad" | **Enable voice** wasn't clicked after the page loaded (section 1). |
+| No start tone at all | **Start tone** is **AP node buzzer** but no buzzer is fitted. Choose **Browser**. |
 | "Arm your quad" works but no lap times | **Announcer Type** is **None** or **Beep**. |
 | **Test voice** is silent on Fedora | Chrome was started without `--enable-speech-dispatcher` (section 2). |
 | **Test voice** is silent on Android | No offline voice data installed, or media volume is down (section 3). |

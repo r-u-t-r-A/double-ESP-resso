@@ -33,7 +33,8 @@ void Config::load(void) {
         version = conf.version & ~CONFIG_MAGIC_MASK;
     }
 
-    // v2 -> v3 appended the ELRS fields, v3 -> v4 the LED chip and order.
+    // v2 -> v3 appended the ELRS fields, v3 -> v4 the LED chip and order,
+    // v4 -> v5 the start tone source.
     if (version == 2U) {
         memset(conf.elrsMac, 0, sizeof(conf.elrsMac));
         conf.elrsEnabled = 0;
@@ -44,6 +45,11 @@ void Config::load(void) {
         conf.ledType = 0;   // WS2812B
         conf.ledOrder = 0;  // GRB
         version = 4U;
+        modified = true;
+    }
+    if (version == 4U) {
+        conf.startTone = START_TONE_BUZZER;
+        version = 5U;
         modified = true;
     }
     if (version == CONFIG_VERSION) conf.version = CONFIG_VERSION | CONFIG_MAGIC;
@@ -92,6 +98,7 @@ void Config::toJson(AsyncResponseStream& destination) {
 #endif
 #ifdef C5VRX_LINK
     config["raceCtl"] = 1;
+    config["startTone"] = conf.startTone;
 #endif
 #ifdef ELRS_BACKPACK
     char mac[18];
@@ -211,6 +218,15 @@ void Config::fromJson(JsonObject source) {
         }
     }
 #endif
+#ifdef C5VRX_LINK
+    if (source["startTone"].is<int>()) {
+        int t = source["startTone"];
+        if ((t == START_TONE_BUZZER || t == START_TONE_BROWSER) && t != conf.startTone) {
+            conf.startTone = t;
+            modified = true;
+        }
+    }
+#endif
     if (source["rfGain"].is<int>()) {
         int gain = source["rfGain"];
         if (gain >= 0 && gain <= 89 && gain != conf.rfGain) {
@@ -251,6 +267,10 @@ void Config::formatElrsMac(char* buf) {
 
 uint8_t Config::getAnnouncerRate() {
     return conf.announcerRate;
+}
+
+uint8_t Config::getStartTone() {
+    return conf.startTone;
 }
 
 bool Config::getElrsEnabled() {
@@ -327,6 +347,7 @@ void Config::setDefaults(void) {
     conf.alarm = 0;  // 0.0 V: low-battery alarm off
     conf.announcerType = 2;
     conf.announcerRate = 10;
+    conf.startTone = START_TONE_BUZZER;
     conf.enterRssi = 120;
     conf.exitRssi = 100;
     strlcpy(conf.ssid, "", sizeof(conf.ssid));

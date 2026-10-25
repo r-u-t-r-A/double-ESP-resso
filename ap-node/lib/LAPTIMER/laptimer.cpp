@@ -22,7 +22,11 @@ void LapTimer::start() {
     DEBUG("LapTimer started\n");
     raceStartTimeMs = millis();
     state = RUNNING;
+#ifdef C5VRX_LINK
+    if (conf->getStartTone() == START_TONE_BUZZER) buz->beep(500);
+#else
     buz->beep(500);
+#endif
     led->on(500);
 }
 

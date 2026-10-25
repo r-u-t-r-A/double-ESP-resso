@@ -4,6 +4,7 @@ const channelSelect = document.getElementById("channelSelect");
 const freqOutput = document.getElementById("freqOutput");
 const announcerSelect = document.getElementById("announcerSelect");
 const announcerRateInput = document.getElementById("rate");
+const startToneSelect = document.getElementById("startTone");
 const enterRssiInput = document.getElementById("enter");
 const exitRssiInput = document.getElementById("exit");
 const enterRssiSpan = document.getElementById("enterSpan");
@@ -28,6 +29,9 @@ const elrsUidDisplay = document.getElementById("elrsUid");
 var elrsBackpack = false;
 // Firmware runs the start countdown (/timer/begin + raceArm/raceStart/raceStop events).
 var raceCtl = false;
+// Start tone source as saved on the AP node: 0 = its buzzer, 1 = this browser.
+// Firmware without the setting leaves it at 1 (browser tone, as upstream).
+var startTone = 1;
 
 // double-ESP-resso: the C5 RF node tunes 5180-5917 MHz only (R8 is the top).
 var rfNode = false;
@@ -116,6 +120,11 @@ onload = function (e) {
         document.querySelectorAll(".ledstrip-only").forEach((el) => (el.style.display = ""));
       }
       raceCtl = config.raceCtl !== undefined;
+      if (config.startTone !== undefined) {
+        startTone = config.startTone;
+        startToneSelect.value = startTone;
+        document.querySelectorAll(".racectl-only").forEach((el) => (el.style.display = ""));
+      }
       if (config.elrsUid !== undefined) {
         elrsBackpack = true;
         showElrsConfig(config);
@@ -303,6 +312,7 @@ function saveConfig() {
       ssid: ssidInput.value,
       pwd: pwdInput.value,
       ...(rfNode ? { rfGain: Math.max(0, Math.min(89, parseInt(rfGainInput.value) || 0)) } : {}),
+      ...(raceCtl ? { startTone: parseInt(startToneSelect.value) || 0 } : {}),
       ...(ledStrip
         ? {
             ledOn: ledOnInput.checked ? 1 : 0,
@@ -323,6 +333,7 @@ function saveConfig() {
     .then((response) => response.json())
     .then((response) => {
       console.log("/config:" + JSON.stringify(response));
+      if (raceCtl) startTone = parseInt(startToneSelect.value) || 0;
       if (elrsBackpack) {
         elrsPhraseInput.value = "";
         fetch("/config")
@@ -651,8 +662,10 @@ if (!!window.EventSource) {
   });
 
   source.addEventListener("raceStart", function (e) {
-    beep(1, 1, "square"); // needed for some reason to make sure we fire the first beep
-    beep(500, 880, "square");
+    if (startTone == 1) {
+      beep(1, 1, "square"); // needed for some reason to make sure we fire the first beep
+      beep(500, 880, "square");
+    }
     startTimerDisplay();
     startRaceButton.disabled = true;
     stopRaceButton.disabled = false;

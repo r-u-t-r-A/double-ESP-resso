@@ -82,6 +82,7 @@ we build on ESP-IDF 6.0.2, whose PHY library may differ.
 - [ ] With a phone streaming the Calibration tab (heavy Wi-Fi traffic), the ring shows no flicker or wrong-colour pixels toward its far end. That would mean RMT underruns.
 - [ ] Press *Start Race*: the gate pulses red during the countdown and flashes green at the tone.
 - [ ] Stop a countdown before the tone (web *Stop Race*, or a long press on the radio). The gate goes straight back to idle blue.
+- [ ] *Start tone* = *AP node buzzer*: only the buzzer sounds at the start, and voice still speaks. *Browser*: only the browser tone sounds.
 - [ ] Carry a VTX through the gate:
   - [ ] Idle: the meter fills.
   - [ ] Race running: the ring turns white while inside, and the lap chase plays.

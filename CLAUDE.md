@@ -67,6 +67,9 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
 - The gate is 50 cm in diameter, so about 94 LEDs at 60/m.
 - The start countdown runs on the AP node (`lib/RACECONTROL`). The web UI posts `/timer/begin`
   and reacts to the `raceArm` / `raceStart` / `raceStop` SSE events for voice, tone and display.
+  - The start tone comes from either the AP buzzer or the browser, never both: config v5
+    `startTone` (`START_TONE_BUZZER` default / `START_TONE_BROWSER`), checked in
+    `LapTimer::start()` and in the browser's `raceStart` handler. Voice is separate.
   - `RaceControl::stop()` calls `LedStrip::disarm()`. The strip's own arming flag otherwise
     stayed red after a countdown was cancelled, until a race started or its 15 s timeout.
 

@@ -100,8 +100,13 @@
 #define CONFIG_JSON_SIZE 640
 #define CONFIG_MAGIC_MASK (0b11U << 30)
 #define CONFIG_MAGIC (0b01U << 30)
-#define CONFIG_VERSION 4U
+#define CONFIG_VERSION 5U
 #define ELRS_MAC_LEN 6
+
+// Who plays the race start tone (C5VRX_LINK builds). The browser's Web Audio
+// tone arrives later than the AP node's buzzer, so play only one of them.
+#define START_TONE_BUZZER 0
+#define START_TONE_BROWSER 1
 
 #define EEPROM_CHECK_TIME_MS 1000
 
@@ -127,6 +132,8 @@ typedef struct {
     // v4: LED chip (ledstrip_chip_e) and wire colour order (ledstrip_order_e).
     uint8_t ledType;
     uint8_t ledOrder;
+    // v5: START_TONE_BUZZER or START_TONE_BROWSER.
+    uint8_t startTone;
 } laptimer_config_t;
 
 class Config {
@@ -152,6 +159,7 @@ class Config {
     uint8_t getLedType();
     uint8_t getLedOrder();
     uint8_t getAnnouncerRate();
+    uint8_t getStartTone();
     bool getElrsEnabled();
     const uint8_t* getElrsMac();
     char* getSsid();
