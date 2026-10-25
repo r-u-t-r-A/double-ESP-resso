@@ -9,6 +9,9 @@
 #include "debug.h"
 #ifdef C5VRX_LINK
 #include "rssi_stream.h"
+#ifdef PIN_SD_CS
+#include <memory>
+#endif
 #endif
 
 static const uint8_t DNS_PORT = 53;
@@ -376,6 +379,10 @@ void Webserver::startServices() {
             }
         }
 #endif
+        char sdBuf[160] = "n/a";
+#ifdef PIN_SD_CS
+        if (sdlog) sdlog->statusString(sdBuf, sizeof(sdBuf));
+#endif
         float voltage = (float)monitor->getBatteryVoltage() / 10;
         const char *format =
             "\
@@ -400,12 +407,13 @@ EEPROM:\n\
 RF Node:\t%s\n\
 ELRS Backpack:\t%s\n\
 %s\
+SD Card:\t%s\n\
 Battery Voltage:\t%0.1fv";
 
         snprintf(buf, sizeof(buf), format,
                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getHeapSize(), ESP.getMaxAllocHeap(), LittleFS.usedBytes(), LittleFS.totalBytes(),
                  ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores(), ESP.getSdkVersion(), ESP.getFlashChipSize(), ESP.getFlashChipSpeed() / 1000000, getCpuFrequencyMhz(),
-                 WiFi.localIP().toString().c_str(), WiFi.macAddress().c_str(), configBuf, rfBuf, elrsStatus, elrsDetail, voltage);
+                 WiFi.localIP().toString().c_str(), WiFi.macAddress().c_str(), configBuf, rfBuf, elrsStatus, elrsDetail, sdBuf, voltage);
         request->send(200, "text/plain", buf);
         led->on(200);
     });
@@ -444,6 +452,63 @@ Battery Voltage:\t%0.1fv";
 #endif
         request->send(200, "application/json", "{\"status\": \"OK\"}");
     });
+
+#ifdef PIN_SD_CS
+    // Browser clock for SD log file names and export times: ?now=<epoch ms>&tz=<min east of UTC>.
+    server.on("/clock", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (sdlog && request->hasParam("now")) {
+            int64_t now = strtoll(request->getParam("now")->value().c_str(), nullptr, 10);
+            int32_t tz = request->hasParam("tz") ? request->getParam("tz")->value().toInt() : 0;
+            if (now > 0) sdlog->setClock(now, tz);
+        }
+        request->send(200, "application/json", "{\"status\": \"OK\"}");
+    });
+
+    // The newest SD log's last ?min= minutes (default 15) as a CSV download.
+    server.on("/sdlog/export", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        if (!sdlog) {
+            request->send(404, "text/plain", "no SD logger");
+            return;
+        }
+        uint32_t minutes = request->hasParam("min") ? request->getParam("min")->value().toInt() : 15;
+        if (minutes == 0 || minutes > 600) minutes = 15;
+        char stamp[24] = "";
+        if (request->hasParam("now")) {
+            int64_t now = strtoll(request->getParam("now")->value().c_str(), nullptr, 10);
+            int32_t tz = request->hasParam("tz") ? request->getParam("tz")->value().toInt() : 0;
+            if (now > 0) {
+                sdlog->setClock(now, tz);
+                sdlog_format_time(stamp, now + (int64_t)tz * 60000);
+            }
+        }
+        auto cursor = std::make_shared<SdLog::Cursor>();
+        const char *why = "";
+        if (!sdlog->openExport(minutes, *cursor, &why)) {
+            request->send(503, "text/plain", why);
+            return;
+        }
+        SdLog *log = sdlog;
+        AsyncWebServerResponse *response = request->beginChunkedResponse(
+            "text/csv", [log, cursor](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+                (void)index;
+                if (cursor->row < cursor->endRow && maxLen < SDLOG_EXPORT_ROW_MAX + sizeof(SDLOG_EXPORT_HEADER))
+                    return RESPONSE_TRY_AGAIN;  // too small for a line now
+                size_t n = log->readExport(*cursor, buffer, maxLen);
+                if (n == 0) log->closeExport(*cursor);
+                return n;
+            });
+        char disposition[80];
+        if (stamp[0]) {
+            // "YYYY-MM-DD HH:MM:SS.mmm" -> rssi_YYYYMMDD-HHMM_last15min.csv
+            snprintf(disposition, sizeof(disposition), "attachment; filename=\"rssi_%.4s%.2s%.2s-%.2s%.2s_last%umin.csv\"",
+                     stamp, stamp + 5, stamp + 8, stamp + 11, stamp + 14, (unsigned)minutes);
+        } else {
+            snprintf(disposition, sizeof(disposition), "attachment; filename=\"rssi_last%umin.csv\"", (unsigned)minutes);
+        }
+        response->addHeader("Content-Disposition", disposition);
+        request->send(response);
+    });
+#endif
 
     server.on("/timer/rssiStart", HTTP_POST, [this](AsyncWebServerRequest *request) {
         sendRssi = true;

@@ -9,13 +9,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Protocol, band power, ELRS backpack, LED strip and RSSI stream tests
+      - name: Protocol, band power, ELRS backpack, LED strip, RSSI stream and SD log tests
         run: |
           cc -std=c99 -Wall -Wextra -Werror -I common tests/test_c5link_proto.c -o t_proto && ./t_proto
           cc -std=c99 -Wall -Wextra -Werror -I rf-node/main tests/test_band_power.c -lm -o t_bp && ./t_bp
           cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/ELRSBACKPACK tests/test_elrs_msp.c -o t_elrs && ./t_elrs
           cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/LEDSTRIP tests/test_ledstrip_timing.c -o t_led && ./t_led
           cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/RSSISTREAM tests/test_rssi_stream.c -o t_stream && ./t_stream
+          cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/SDLOG tests/test_sdlog_row.c -o t_sdlog && ./t_sdlog
 
   rf-node:
     runs-on: ubuntu-latest

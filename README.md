@@ -55,10 +55,12 @@ Every frequency is tuned the same way: the PLL is set directly, with the LO
   - A 1S battery on the AP node's battery pads.
   - A **WS2812B strip around the gate** on the AP node's D2, with its own
     5 V supply. See [docs/hardware.md](docs/hardware.md#ws2812b-gate-led-strip-ap-node-d2).
+  - A **microSD card** on the AP node's SPI pins (D8–D10, CS on D4) for 1 kHz
+    RSSI logging. See [docs/hardware.md](docs/hardware.md#microsd-card-ap-node-spi).
 
 **Join only these four pins between the boards:** 5V, GND, D1 and D5. D2/D3
-are strapping pins and D6/D7 carry the UART0 console, so a full pin-to-pin
-stack is not safe. See
+are strapping pins, D6/D7 carry the UART0 console and D8–D10 the SD card, so a
+full pin-to-pin stack is not safe. See
 [docs/hardware.md](docs/hardware.md).
 
 ## Repository layout
@@ -69,7 +71,7 @@ stack is not safe. See
 | `ap-node/` | PlatformIO / Arduino PhobosLT fork for the AP node. MIT, from PhobosLT. |
 | `common/c5link_proto.h` | The shared UART line protocol (MIT). See [docs/protocol.md](docs/protocol.md). |
 | `tools/rssi_log.py` | Records and plots RF node RSSI over USB, for calibration. |
-| `tests/` | Host unit tests: protocol, band-power meter, ELRS, LED strip, RSSI stream. |
+| `tests/` | Host unit tests: protocol, band-power meter, ELRS, LED strip, RSSI stream, SD log rows. |
 
 ## Documentation
 
@@ -125,6 +127,8 @@ cc -std=c99 -Wall -Wextra -Werror -I common tests/test_c5link_proto.c -o /tmp/t_
 cc -std=c99 -Wall -Wextra -Werror -I rf-node/main tests/test_band_power.c -lm -o /tmp/t_bp && /tmp/t_bp
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/ELRSBACKPACK tests/test_elrs_msp.c -o /tmp/t_elrs && /tmp/t_elrs
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/LEDSTRIP tests/test_ledstrip_timing.c -o /tmp/t_led && /tmp/t_led
+cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/RSSISTREAM tests/test_rssi_stream.c -o /tmp/t_stream && /tmp/t_stream
+cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/SDLOG tests/test_sdlog_row.c -o /tmp/t_sdlog && /tmp/t_sdlog
 ```
 
 ## Using it
@@ -147,6 +151,26 @@ For finer calibration without the AP node, plug the RF node in over USB and run:
 tools/rssi_log.py /dev/ttyACM0 --freq 5732 --gain 30 --seconds 60 -o pass.csv
 tools/rssi_log.py --plot pass.csv
 ```
+
+## RSSI logging to SD
+
+With a microSD card fitted, tick **Log RSSI to SD card (1 kHz)** on the Config
+tab and save. The AP node then writes every sample the lap timer sees, about
+105 MB per hour, until you untick it. The *SD card* line on the Config tab shows
+the file, row count, free space and any dropped samples.
+
+- One file per logging session, numbered: `rssi_0007_20261025-1802.csv`. The
+  date comes from the browser when the page loads; without it the file is just
+  `rssi_0007.csv`.
+- Columns: `ms` (AP node time), `raw` (RSSI from the RF node), `filtered` (what
+  the lap timer compares with Enter/Exit), `event` (`S` race start, `X` stop,
+  `L` lap, `-` none) and `lap_ms` (the lap time, on lap rows).
+- **Export last 15 min of RSSI log** under the Calibration graph downloads the
+  end of the newest file as a CSV with a wall-clock `time` column. That's about
+  38 MB and takes one to two minutes over the timer's Wi-Fi. For whole
+  sessions, put the card in a computer.
+- The file is saved every second, so pulling the power loses about a second.
+  Untick logging before you take the card out.
 
 ## Gate lights
 

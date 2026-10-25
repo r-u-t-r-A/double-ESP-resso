@@ -12,6 +12,9 @@
 #ifdef ELRS_BACKPACK
 #include "elrs_backpack.h"
 #endif
+#ifdef PIN_SD_CS
+#include "sdlog.h"
+#endif
 
 #define WIFI_CONNECTION_TIMEOUT_MS 30000
 #define WIFI_RECONNECT_TIMEOUT_MS 500
@@ -38,6 +41,9 @@ class Webserver {
 #ifdef ELRS_BACKPACK
     void setElrsBackpack(ElrsBackpack *b) { elrs = b; }
 #endif
+#ifdef PIN_SD_CS
+    void setSdLog(SdLog *s) { sdlog = s; }
+#endif
 
    private:
     void startServices();
@@ -63,6 +69,9 @@ class Webserver {
 #endif
 #ifdef ELRS_BACKPACK
     ElrsBackpack *elrs = nullptr;
+#endif
+#ifdef PIN_SD_CS
+    SdLog *sdlog = nullptr;
 #endif
 
     wifi_mode_t wifiMode = WIFI_OFF;

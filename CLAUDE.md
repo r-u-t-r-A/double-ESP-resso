@@ -97,6 +97,21 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
 - Unproven: throughput on hardware, and whether the extra 2.4 GHz traffic raises the
   noise floor.
 
+## SD card logging
+
+- `lib/SDLOG` (`#ifdef PIN_SD_CS`): microSD over SPI on the AP node, SCK D8, MISO D9, MOSI D10,
+  CS D4 (not the XIAO's SS on D3, a strapping pin). Config v6 `sdLog` switches it on.
+- `loop()` pushes every 1 kHz sample (raw, filtered, race start/stop/lap events) into a
+  lock-free 2048-sample ring (`sdlog_row.h`, plain C, tested by `tests/test_sdlog_row.c`). A
+  writer task (priority 1) writes fixed-width 29-byte rows, one file per session
+  (`/rssi_NNNN[_date].csv`), and flushes every 1 s. Card stalls only fill the ring.
+- Fixed-width rows let `/sdlog/export?min=15` binary-search the window by `ms`. It streams a
+  chunked CSV with wall-clock times from the browser clock (`/clock`, sent on page load).
+  Times are only possible for this boot's file, because `millis()` restarts at boot.
+- Unproven: SD library behaviour on the C5 (Arduino 3.3.8), write stalls versus the ring,
+  export speed over the AP, SPI noise near the RF node, and free heap with the ring (static
+  RAM is 84 KB).
+
 ## ELRS radio start
 
 - `lib/ELRSBACKPACK` (`-DELRS_BACKPACK`) listens for the ExpressLRS TX backpack's ESP-NOW
@@ -159,6 +174,7 @@ cc -std=c99 -Wall -Wextra -Werror -I rf-node/main tests/test_band_power.c -lm -o
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/ELRSBACKPACK tests/test_elrs_msp.c -o /tmp/t_elrs && /tmp/t_elrs
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/LEDSTRIP tests/test_ledstrip_timing.c -o /tmp/t_led && /tmp/t_led
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/RSSISTREAM tests/test_rssi_stream.c -o /tmp/t_stream && /tmp/t_stream
+cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/SDLOG tests/test_sdlog_row.c -o /tmp/t_sdlog && /tmp/t_sdlog
 ```
 
 ## Conventions

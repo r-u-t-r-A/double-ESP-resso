@@ -26,12 +26,13 @@ The AP node:
 | D1 (GPIO0) | UART TX to the RF node |
 | D0 (GPIO1) | Optional buzzer |
 | D2 (GPIO25) | Optional WS2812B gate LED strip |
+| D8 / D9 / D10 (GPIO8/9/10) | Optional microSD card: SCK / MISO / MOSI (the XIAO's SPI pins) |
+| D4 (GPIO23) | microSD card CS |
 | GPIO27 | User LED |
 | GPIO6 / GPIO26 | Battery sense ADC / divider enable |
 
-Until 2026-10-25 the link used D9 and the buzzer D8. They moved to free the
-XIAO's SPI pins (D8-D10) for an SD card: rewire older stacks, and flash both
-boards.
+Until 2026-10-25 the link used D9 and the buzzer D8. They moved so the SD card
+could use the XIAO's SPI pins: rewire older stacks, and flash both boards.
 
 ## Stacking rule: join 5V, GND, D1 and D5 only
 
@@ -40,7 +41,8 @@ Joining **all** pins is not safe:
 
 - D2 (GPIO25) and D3 (GPIO7) are ESP32-C5 strapping pins. If one board
   drives them while the other resets, that board can boot in the wrong mode.
-- **Do not join D9** any more: on the AP node it is kept for an SD card.
+- D8–D10 and D4 carry the AP node's SD card. **Do not join D9** any more: it
+  is the card's MISO line on the AP node.
 - Up to firmware 1 the RF node drove a 40–80 MHz IQ bus on D0–D3 and D10.
   The current RF node reads I/Q from on-chip SRAM and drives no other pins,
   but an older RF node build must not be stacked on a full header.
@@ -139,3 +141,28 @@ AP node D2 ── 330 Ω ──────────────────�
 
 The LED chip, colour order, LED count, brightness cap and on/off switch are set
 in the web UI (Configuration tab). The colour meanings are listed in `README.md`.
+
+## microSD card (AP node, SPI)
+
+Optional. With a card fitted, the AP node can log every 1 kHz RSSI sample (see
+`README.md`, *RSSI logging to SD*). Use a plain SPI microSD breakout that runs
+from 3.3 V, or the bare card in a socket.
+
+| SD signal | AP node pin |
+|-----------|-------------|
+| SCK | D8 (GPIO8) |
+| MISO (card DO) | D9 (GPIO9) |
+| MOSI (card DI) | D10 (GPIO10) |
+| CS | D4 (GPIO23) |
+| VCC | 3V3 |
+| GND | GND |
+
+- CS is on D4, not on the XIAO's labelled SS (D3): D3 is a strapping pin, and
+  a breakout's CS pull-up would hold it high at reset.
+- Put a 10 µF capacitor across VCC and GND at the card. Cards draw 100–200 mA
+  spikes while writing.
+- Breakouts with a 5 V regulator and level shifter (the common blue "Catalex"
+  module) need 5 V on VCC instead, and their level shifter can load MISO.
+  Prefer a 3.3 V-only breakout.
+- The card is formatted FAT32 (most cards up to 32 GB come that way).
+- The SPI clock is 20 MHz. Keep the wires short: they sit close to the RF node.

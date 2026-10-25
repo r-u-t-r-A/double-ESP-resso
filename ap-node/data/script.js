@@ -5,6 +5,9 @@ const freqOutput = document.getElementById("freqOutput");
 const announcerSelect = document.getElementById("announcerSelect");
 const announcerRateInput = document.getElementById("rate");
 const startToneSelect = document.getElementById("startTone");
+const sdLogInput = document.getElementById("sdLog");
+const sdStatusDisplay = document.getElementById("sdstatus");
+const exportLogButton = document.getElementById("exportLogButton");
 const enterRssiInput = document.getElementById("enter");
 const exitRssiInput = document.getElementById("exit");
 const enterRssiSpan = document.getElementById("enterSpan");
@@ -32,6 +35,8 @@ var raceCtl = false;
 // Start tone source as saved on the AP node: 0 = its buzzer, 1 = this browser.
 // Firmware without the setting leaves it at 1 (browser tone, as upstream).
 var startTone = 1;
+// AP node has an SD card logger (1 kHz RSSI).
+var sdLog = false;
 
 // double-ESP-resso: the C5 RF node tunes 5180-5917 MHz only (R8 is the top).
 var rfNode = false;
@@ -125,6 +130,13 @@ onload = function (e) {
         startToneSelect.value = startTone;
         document.querySelectorAll(".racectl-only").forEach((el) => (el.style.display = ""));
       }
+      if (config.sdLog !== undefined) {
+        sdLog = true;
+        sdLogInput.checked = !!config.sdLog;
+        document.querySelectorAll(".sdlog-only").forEach((el) => (el.style.display = ""));
+        // The AP node has no clock: lend it ours for log file names and export times.
+        fetch(`/clock?now=${Date.now()}&tz=${-new Date().getTimezoneOffset()}`, { method: "POST" }).catch(() => {});
+      }
       if (config.elrsUid !== undefined) {
         elrsBackpack = true;
         showElrsConfig(config);
@@ -149,6 +161,8 @@ function getBatteryVoltage() {
       batteryVoltageDisplay.innerText = batteryVoltage;
       const rfMatch = response.match(/RF Node:\s*([^\n]*)/);
       if (rfNode && rfMatch) rfStatusDisplay.innerText = rfMatch[1];
+      const sdMatch = response.match(/SD Card:\s*([^\n]*)/);
+      if (sdLog && sdMatch) sdStatusDisplay.innerText = sdMatch[1];
     });
 }
 
@@ -313,6 +327,7 @@ function saveConfig() {
       pwd: pwdInput.value,
       ...(rfNode ? { rfGain: Math.max(0, Math.min(89, parseInt(rfGainInput.value) || 0)) } : {}),
       ...(raceCtl ? { startTone: parseInt(startToneSelect.value) || 0 } : {}),
+      ...(sdLog ? { sdLog: sdLogInput.checked ? 1 : 0 } : {}),
       ...(ledStrip
         ? {
             ledOn: ledOnInput.checked ? 1 : 0,
@@ -417,6 +432,36 @@ function playTone(durationMs, frequency, fadeS) {
   gain.gain.exponentialRampToValueAtTime(0.00001, fadeAt + fadeS);
   osc.start(t0);
   osc.stop(fadeAt + fadeS);
+}
+
+// Downloads the newest SD log's last `minutes` as CSV, with this browser's
+// clock for the wall-clock column.
+async function exportRssiLog(minutes) {
+  const label = exportLogButton.textContent;
+  exportLogButton.disabled = true;
+  exportLogButton.textContent = "Exporting...";
+  try {
+    const tz = -new Date().getTimezoneOffset();
+    const response = await fetch(`/sdlog/export?min=${minutes}&now=${Date.now()}&tz=${tz}`);
+    if (!response.ok) {
+      alert("RSSI log export failed: " + (await response.text()));
+      return;
+    }
+    const blob = await response.blob();
+    const match = /filename="([^"]+)"/.exec(response.headers.get("Content-Disposition") || "");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = match ? match[1] : "rssi_log.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+  } catch (e) {
+    alert("RSSI log export failed: " + e);
+  } finally {
+    exportLogButton.disabled = false;
+    exportLogButton.textContent = label;
+  }
 }
 
 function addLap(lapStr) {

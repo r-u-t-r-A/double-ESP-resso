@@ -33,6 +33,9 @@ static void handleRadioButton(uint32_t currentTimeMs) {
     }
 }
 #endif
+#ifdef PIN_SD_CS
+static SdLog sdlog;
+#endif
 #ifdef PIN_LED_STRIP
 static LedStrip ledStrip;
 
@@ -72,6 +75,9 @@ static void parallelTask(void *pvArgs) {
         race.handleRaceControl(currentTimeMs);
 #endif
         monitor.checkBatteryState(currentTimeMs, config.getAlarmThreshold());
+#ifdef PIN_SD_CS
+        sdlog.setEnabled(config.getSdLog());
+#endif
 #ifdef PIN_LED_STRIP
         handleGateLights(currentTimeMs);
 #endif
@@ -122,6 +128,10 @@ void setup() {
 #ifdef ELRS_BACKPACK
     ws.setElrsBackpack(&elrs);
 #endif
+#ifdef PIN_SD_CS
+    sdlog.init(PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, PIN_SD_CS);
+    ws.setSdLog(&sdlog);
+#endif
     led.on(400);
     buzzer.beep(200);
     initParallelTask();
@@ -134,6 +144,10 @@ void loop() {
         uint32_t currentTimeMs = millis();
         timer.handleLapTimerUpdate(currentTimeMs);
         ws.pushRssiSample(currentTimeMs, rx.readRssi(), timer.getRssi());
+#ifdef PIN_SD_CS
+        sdlog.push(currentTimeMs, rx.readRssi(), timer.getRssi(), timer.isRunning(), timer.getLapSerial(),
+                   timer.peekLapTime());
+#endif
     }
     ElegantOTA.loop();
     delay(1);

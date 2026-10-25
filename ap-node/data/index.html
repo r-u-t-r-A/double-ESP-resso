@@ -105,6 +105,16 @@
             </select>
           </div>
 
+          <div class="config-item sdlog-only" style="display: none">
+            <label for="sdLog">Log RSSI to SD card (1 kHz):</label>
+            <input type="checkbox" id="sdLog" />
+          </div>
+
+          <div class="config-item sdlog-only" style="display: none">
+            <label for="sdstatus">SD card:</label>
+            <span class="val" id="sdstatus">-</span>
+          </div>
+
           <div class="config-item">
             <label for="pname">Pilot name:</label>
             <input type="text" id="pname" maxlength="20" />
@@ -212,6 +222,9 @@
       <div id="calib" class="tabcontent">
         <div>
           <canvas id="rssiChart"></canvas>
+        </div>
+        <div class="sdlog-only" style="display: none">
+          <button id="exportLogButton" onclick="exportRssiLog(15)">Export last 15 min of RSSI log</button>
         </div>
         <div class="config-item">
           <label for="enter">Enter RSSI:</label>

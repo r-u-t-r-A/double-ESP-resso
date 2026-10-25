@@ -35,6 +35,10 @@
 #define PIN_C5LINK_TX 0       //D1 -> RF node RX
 #define PIN_BUZZER 1          //D0
 #define PIN_LED_STRIP 25      //D2, WS2812B data (330R series resistor)
+#define PIN_SD_SCK 8          //D8, microSD over SPI (XIAO SCK)
+#define PIN_SD_MISO 9         //D9 (XIAO MISO)
+#define PIN_SD_MOSI 10        //D10 (XIAO MOSI)
+#define PIN_SD_CS 23          //D4: the XIAO's SS (D3) is a strapping pin
 #define BUZZER_INVERTED false
 #define DEFAULT_FREQUENCY 5658 //R1
 #define DEFAULT_RF_GAIN 35
@@ -101,7 +105,7 @@
 #define CONFIG_JSON_SIZE 640
 #define CONFIG_MAGIC_MASK (0b11U << 30)
 #define CONFIG_MAGIC (0b01U << 30)
-#define CONFIG_VERSION 5U
+#define CONFIG_VERSION 6U
 #define ELRS_MAC_LEN 6
 
 // Who plays the race start tone (C5VRX_LINK builds). The browser's Web Audio
@@ -138,6 +142,8 @@ typedef struct {
     uint8_t ledOrder;
     // v5: START_TONE_BUZZER or START_TONE_BROWSER.
     uint8_t startTone;
+    // v6: log 1 kHz RSSI to the SD card (PIN_SD_CS builds).
+    uint8_t sdLog;
 } laptimer_config_t;
 
 class Config {
@@ -164,6 +170,7 @@ class Config {
     uint8_t getLedOrder();
     uint8_t getAnnouncerRate();
     uint8_t getStartTone();
+    bool getSdLog();
     bool getElrsEnabled();
     const uint8_t* getElrsMac();
     char* getSsid();
