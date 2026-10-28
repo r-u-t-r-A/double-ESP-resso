@@ -179,6 +179,7 @@ cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/ELRSBACKPACK tests/test_elrs_ms
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/LEDSTRIP tests/test_ledstrip_timing.c -o /tmp/t_led && /tmp/t_led
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/RSSISTREAM tests/test_rssi_stream.c -o /tmp/t_stream && /tmp/t_stream
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/SDLOG tests/test_sdlog_row.c -o /tmp/t_sdlog && /tmp/t_sdlog
+cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/CALIBRATION tests/test_calibration.c -o /tmp/t_cal && /tmp/t_cal
 ```
 
 ## Conventions
