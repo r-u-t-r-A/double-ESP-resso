@@ -164,7 +164,7 @@ higher in the table take priority.
 | Drone enters the gate while racing | Blue sparkle over green, fading out over about 20 s |
 | Staging ("Arm your quad" and the staging tones) | Orange, two LEDs on and one off. Times out after 15 s if the start never comes. |
 | Race running | Green |
-| Idle | Bouncing balls (yellow, orange, purple and blue dots falling onto the first LED and bouncing, like WLED's effect), plus an RSSI level meter that fills from *Exit* to *Enter* (useful for calibration) |
+| Idle | Colour twinkles: on a dark ring, random LEDs fade up to yellow, red, pink or purple and back off (like WLED's *Colortwinkles*), so only a few are lit and idle power stays low. Plus an RSSI level meter that fills from *Exit* to *Enter* (useful for calibration) |
 | Low battery | Short amber blip every 2 s, over any state |
 
 ### Start sequence

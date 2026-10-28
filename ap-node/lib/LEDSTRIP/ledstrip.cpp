@@ -1,7 +1,5 @@
 #include "ledstrip.h"
 
-#include <math.h>
-
 #include "debug.h"
 
 static const uint32_t COLOR_OFF = 0;
@@ -11,8 +9,9 @@ static const uint32_t RH_GREEN = 0x00FF00;   // race start
 static const uint32_t RH_RED = 0xFF0000;     // race stop
 static const uint32_t RH_SEAT1 = 0x0022FF;   // seat 1 (blue), gate entrance
 static const uint32_t COLOR_RUNNING = 0x00C800;
-// Idle bouncing balls: yellow, orange, purple, blue.
-static const uint32_t BALL_COLORS[LEDSTRIP_BALLS] = {0xFFFF00, 0xC03F00, 0x7E0081, 0x0042BD};
+// Idle twinkle colours: yellow, red, pink, purple.
+static const uint32_t TWINKLE_COLORS[LEDSTRIP_TWINKLE_COLORS] = {0xFFFF00, 0xFF0000, 0xFF0080, 0x8000FF};
+static const uint8_t TWINKLE_RISING = 0x80;
 
 // Adafruit buffer layout for each ledstrip_order_e.
 static const neoPixelType NEO_ORDERS[LEDSTRIP_ORDER_COUNT] = {NEO_GRB, NEO_RGB, NEO_BRG, NEO_RBG, NEO_GBR, NEO_BGR};
@@ -101,43 +100,59 @@ void LedStrip::fill(uint32_t color) {
     strip.fill(color, 0, count);
 }
 
-void LedStrip::renderBouncingBalls(uint32_t now) {
-    // Launching at sqrt(2 g) reaches the top of the strip (height 1).
-    const float g = LEDSTRIP_BALL_GRAVITY;
-    const float launch = sqrtf(2.0f * g);
-    // Relaunch after a race or other effect instead of replaying missed bounces.
-    if (now - ballsFrameMs > 500) ballsReady = false;
-    ballsFrameMs = now;
-    if (!ballsReady) {
-        for (uint8_t i = 0; i < LEDSTRIP_BALLS; ++i) {
-            balls[i].speed = launch;
-            balls[i].damping = 0.90f - 0.05f * i;  // each ball dies down at its own rate
-            balls[i].bounceMs = now - i * 250u;    // out of step from the start
-        }
-        ballsReady = true;
-    }
-    fill(COLOR_OFF);
+uint32_t LedStrip::scaleColor(uint32_t color, uint8_t level) {
+    return Adafruit_NeoPixel::Color((uint8_t)(((color >> 16) & 0xFF) * level / 255),
+                                    (uint8_t)(((color >> 8) & 0xFF) * level / 255),
+                                    (uint8_t)((color & 0xFF) * level / 255));
+}
+
+void LedStrip::renderTwinkles(uint32_t now) {
     if (count == 0) return;
-    for (uint8_t i = 0; i < LEDSTRIP_BALLS; ++i) {
-        // Flight time between bounces is 2 v / g; catch up on every landing.
-        for (;;) {
-            uint32_t flightMs = (uint32_t)(2000.0f * balls[i].speed / g);
-            if ((now - balls[i].bounceMs) < flightMs) break;
-            balls[i].bounceMs += flightMs;
-            balls[i].speed *= balls[i].damping;
-            if (balls[i].speed < LEDSTRIP_BALL_RELAUNCH * launch) balls[i].speed = launch;
+    // Coming back from a race or another effect: start from a dark ring.
+    if (now - twinkleFrameMs > 500) {
+        memset(twinkle, 0, sizeof(twinkle));
+        twinkleSpawnAcc = 0;
+    }
+    twinkleFrameMs = now;
+
+    // Fade every lit LED one frame along: up linearly, down slowing as it dims.
+    for (uint16_t i = 0; i < count; ++i) {
+        if (!twinkle[i]) continue;
+        if (twinkleState[i] & TWINKLE_RISING) {
+            if (twinkle[i] > 255 - LEDSTRIP_TWINKLE_RISE_STEP) {
+                twinkle[i] = 255;
+                twinkleState[i] &= ~TWINKLE_RISING;
+            } else {
+                twinkle[i] += LEDSTRIP_TWINKLE_RISE_STEP;
+            }
+        } else {
+            uint8_t fall = (twinkle[i] >> LEDSTRIP_TWINKLE_FALL_SHIFT) + 1;
+            twinkle[i] = twinkle[i] > fall ? twinkle[i] - fall : 0;
         }
-        float t = (now - balls[i].bounceMs) / 1000.0f;
-        float h = balls[i].speed * t - 0.5f * g * t * t;
-        if (h < 0.0f) h = 0.0f;
-        if (h > 1.0f) h = 1.0f;
-        uint16_t px = (uint16_t)(h * (count - 1) + 0.5f);
-        strip.setPixelColor(px, BALL_COLORS[i]);
+    }
+
+    // A steady rate of new twinkles (in units of 1/100000 of a twinkle), each
+    // on a dark LED with a random colour.
+    twinkleSpawnAcc += (uint32_t)count * LEDSTRIP_TWINKLE_SPAWN_PCT_PER_S * LEDSTRIP_FRAME_MS;
+    while (twinkleSpawnAcc >= 100000u) {
+        twinkleSpawnAcc -= 100000u;
+        for (uint8_t tries = 0; tries < 4; ++tries) {
+            uint16_t i = (uint16_t)random(count);
+            if (twinkle[i]) continue;
+            twinkle[i] = 1;
+            twinkleState[i] = TWINKLE_RISING | (uint8_t)random(LEDSTRIP_TWINKLE_COLORS);
+            break;
+        }
+    }
+
+    for (uint16_t i = 0; i < count; ++i) {
+        uint32_t c = twinkle[i] ? scaleColor(TWINKLE_COLORS[twinkleState[i] & 0x0F], twinkle[i]) : COLOR_OFF;
+        strip.setPixelColor(i, c);
     }
 }
 
 void LedStrip::renderIdle(uint32_t now, const ledstrip_inputs_t &in) {
-    renderBouncingBalls(now);
+    renderTwinkles(now);
 
     // RSSI level meter: lights a growing arc from exitRssi towards
     // enterRssi, which makes threshold calibration visible at the gate.
