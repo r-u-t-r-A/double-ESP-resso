@@ -1,7 +1,5 @@
 #include "ledstrip.h"
 
-#include <math.h>
-
 #include "debug.h"
 
 static const uint32_t COLOR_OFF = 0;
@@ -11,8 +9,8 @@ static const uint32_t RH_GREEN = 0x00FF00;   // race start
 static const uint32_t RH_RED = 0xFF0000;     // race stop
 static const uint32_t RH_SEAT1 = 0x0022FF;   // seat 1 (blue), gate entrance
 static const uint32_t COLOR_RUNNING = 0x00C800;
-// Idle bouncing balls: yellow, orange, purple, blue.
-static const uint32_t BALL_COLORS[LEDSTRIP_BALLS] = {0xFFFF00, 0xC03F00, 0x7E0081, 0x0042BD};
+// Idle blends gradient: yellow, red, pink, purple (and back).
+static const uint32_t BLENDS_COLORS[LEDSTRIP_BLENDS_COLORS] = {0xFFFF00, 0xFF0000, 0xFF0080, 0x8000FF};
 
 // Adafruit buffer layout for each ledstrip_order_e.
 static const neoPixelType NEO_ORDERS[LEDSTRIP_ORDER_COUNT] = {NEO_GRB, NEO_RGB, NEO_BRG, NEO_RBG, NEO_GBR, NEO_BGR};
@@ -101,43 +99,45 @@ void LedStrip::fill(uint32_t color) {
     strip.fill(color, 0, count);
 }
 
-void LedStrip::renderBouncingBalls(uint32_t now) {
-    // Launching at sqrt(2 g) reaches the top of the strip (height 1).
-    const float g = LEDSTRIP_BALL_GRAVITY;
-    const float launch = sqrtf(2.0f * g);
-    // Relaunch after a race or other effect instead of replaying missed bounces.
-    if (now - ballsFrameMs > 500) ballsReady = false;
-    ballsFrameMs = now;
-    if (!ballsReady) {
-        for (uint8_t i = 0; i < LEDSTRIP_BALLS; ++i) {
-            balls[i].speed = launch;
-            balls[i].damping = 0.90f - 0.05f * i;  // each ball dies down at its own rate
-            balls[i].bounceMs = now - i * 250u;    // out of step from the start
+uint32_t LedStrip::blendsPalette(uint8_t pos) {
+    // There and back: yellow, red, pink, purple, pink, red. Wrapping purple
+    // straight into yellow would pass through a muddy grey-pink.
+    uint16_t x = pos < 128 ? pos * 2u : (255u - pos) * 2u;  // 0..254 along the colours
+    const uint16_t span = 255 / (LEDSTRIP_BLENDS_COLORS - 1);
+    uint8_t k = x / span;
+    if (k > LEDSTRIP_BLENDS_COLORS - 2) k = LEDSTRIP_BLENDS_COLORS - 2;
+    uint16_t f = (uint16_t)((x - k * span) * 256u / span);  // 0..256 towards the next colour
+    if (f > 256) f = 256;
+    uint32_t a = BLENDS_COLORS[k], b = BLENDS_COLORS[k + 1];
+    uint8_t r = (uint8_t)((((a >> 16) & 0xFF) * (256 - f) + ((b >> 16) & 0xFF) * f) >> 8);
+    uint8_t g = (uint8_t)((((a >> 8) & 0xFF) * (256 - f) + ((b >> 8) & 0xFF) * f) >> 8);
+    uint8_t bl = (uint8_t)(((a & 0xFF) * (256 - f) + (b & 0xFF) * f) >> 8);
+    return Adafruit_NeoPixel::Color(r, g, bl);
+}
+
+void LedStrip::renderBlends(uint32_t now) {
+    // Coming back from a race or another effect: fade in from dark.
+    if (now - blendsFrameMs > 500) memset(blend, 0, sizeof(blend));
+    blendsFrameMs = now;
+    uint8_t drift = (uint8_t)((uint64_t)(now % LEDSTRIP_BLENDS_CYCLE_MS) * 256 / LEDSTRIP_BLENDS_CYCLE_MS);
+    for (uint16_t i = 0; i < count; ++i) {
+        // Triangle wave along the strip: each half-wave sweeps half the gradient.
+        uint16_t phase = (uint16_t)((uint32_t)(i % LEDSTRIP_BLENDS_WAVE_PX) * 256 / LEDSTRIP_BLENDS_WAVE_PX);
+        uint8_t wave = (uint8_t)(phase < 128 ? phase : 255 - phase);
+        uint32_t target = blendsPalette((uint8_t)(drift + wave));
+        uint8_t t[3] = {(uint8_t)(target >> 16), (uint8_t)(target >> 8), (uint8_t)target};
+        for (uint8_t c = 0; c < 3; ++c) {
+            int16_t d = (int16_t)t[c] - blend[i][c];
+            int16_t step = (int16_t)(d * LEDSTRIP_BLENDS_EASE / 256);
+            if (step == 0 && d != 0) step = d > 0 ? 1 : -1;  // always arrive
+            blend[i][c] = (uint8_t)(blend[i][c] + step);
         }
-        ballsReady = true;
-    }
-    fill(COLOR_OFF);
-    if (count == 0) return;
-    for (uint8_t i = 0; i < LEDSTRIP_BALLS; ++i) {
-        // Flight time between bounces is 2 v / g; catch up on every landing.
-        for (;;) {
-            uint32_t flightMs = (uint32_t)(2000.0f * balls[i].speed / g);
-            if ((now - balls[i].bounceMs) < flightMs) break;
-            balls[i].bounceMs += flightMs;
-            balls[i].speed *= balls[i].damping;
-            if (balls[i].speed < LEDSTRIP_BALL_RELAUNCH * launch) balls[i].speed = launch;
-        }
-        float t = (now - balls[i].bounceMs) / 1000.0f;
-        float h = balls[i].speed * t - 0.5f * g * t * t;
-        if (h < 0.0f) h = 0.0f;
-        if (h > 1.0f) h = 1.0f;
-        uint16_t px = (uint16_t)(h * (count - 1) + 0.5f);
-        strip.setPixelColor(px, BALL_COLORS[i]);
+        strip.setPixelColor(i, Adafruit_NeoPixel::Color(blend[i][0], blend[i][1], blend[i][2]));
     }
 }
 
 void LedStrip::renderIdle(uint32_t now, const ledstrip_inputs_t &in) {
-    renderBouncingBalls(now);
+    renderBlends(now);
 
     // RSSI level meter: lights a growing arc from exitRssi towards
     // enterRssi, which makes threshold calibration visible at the gate.

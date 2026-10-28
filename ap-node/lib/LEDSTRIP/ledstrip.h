@@ -19,7 +19,7 @@
  *   gate entry while racing    -> seat-1 blue sparkle over green (RH "Gate Entrance")
  *   staging                    -> orange, two on / one off (RH "Race Staging")
  *   running                    -> green
- *   idle                       -> bouncing balls plus an RSSI level meter
+ *   idle                       -> "blends" colour flow plus an RSSI level meter
  *   low battery                -> short amber blip every 2 s over any state
  */
 #include <Adafruit_NeoPixel.h>
@@ -37,11 +37,13 @@
 #define LEDSTRIP_SPARKLE_STEP_MS 100   // RH sparkle defaults: 100 steps of 100 ms,
 #define LEDSTRIP_SPARKLE_STEPS 100     // ~1 new pixel per step, 5 % decay per step
 #define LEDSTRIP_SPARKLE_DECAY_PCT 95
-// Idle "bouncing balls" (like WLED's effect, written from scratch): balls fall
-// from the top of the strip onto LED 0 and lose speed at every bounce.
-#define LEDSTRIP_BALLS 4
-#define LEDSTRIP_BALL_GRAVITY 0.31f    // strip lengths per s^2
-#define LEDSTRIP_BALL_RELAUNCH 0.1f    // relaunch below this fraction of the launch speed
+// Idle "blends" (like WLED's effect, written from scratch): every pixel eases
+// toward a colour from a yellow-red-pink-purple gradient, picked by a wave
+// along the strip that drifts over time.
+#define LEDSTRIP_BLENDS_COLORS 4
+#define LEDSTRIP_BLENDS_CYCLE_MS 12000  // the drift goes once around the gradient
+#define LEDSTRIP_BLENDS_WAVE_PX 48      // length of one colour wave along the strip
+#define LEDSTRIP_BLENDS_EASE 20         // of 256: how far a pixel moves toward its colour per frame
 
 typedef struct {
     bool running;           // LapTimer RUNNING
@@ -98,13 +100,8 @@ class LedStrip {
     uint32_t effectMs = 0;
     uint32_t lastFrameMs = 0;
     uint8_t sparkle[LEDSTRIP_MAX_LEDS];  // per-pixel sparkle level
-    struct {
-        float speed;        // upward speed at the last bounce, strip lengths/s
-        float damping;      // speed kept per bounce
-        uint32_t bounceMs;  // time of the last bounce
-    } balls[LEDSTRIP_BALLS];
-    bool ballsReady = false;
-    uint32_t ballsFrameMs = 0;
+    uint8_t blend[LEDSTRIP_MAX_LEDS][3];  // idle blends: each pixel's current R, G, B
+    uint32_t blendsFrameMs = 0;
     uint16_t sparkleSteps = 0;
     uint32_t sparkleStepMs = 0;
 
@@ -114,7 +111,8 @@ class LedStrip {
     bool effectActive(uint32_t now);
     void stepSparkle(uint32_t now);
     void renderIdle(uint32_t now, const ledstrip_inputs_t &in);
-    void renderBouncingBalls(uint32_t now);
+    void renderBlends(uint32_t now);
+    static uint32_t blendsPalette(uint8_t pos);
     void renderStaging();
     void renderRainbow(uint32_t now);
     void renderSparkle();
