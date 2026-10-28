@@ -6,11 +6,16 @@
  * Every line is ASCII:  <payload>*<HH>\n
  * where HH is the upper-case hex XOR of all payload bytes (NMEA style).
  *
- *   RF -> AP  R,<seq 0-255>,<rssi 0-255>                    1 kHz RSSI sample
+ *   RF -> AP  R,<seq 0-255>,<rssi 0-255>,<clip 0-255>       1 kHz RSSI sample
  *   RF -> AP  S,<mhz>,<gain>,<state>,<version>              status / ack / 1 s heartbeat
  *   AP -> RF  F,<mhz>                                       tune
  *   AP -> RF  G,<gain>                                      fixed RX gain index
  *   AP -> RF  Q                                             query status
+ *
+ * clip is the capture's clipped I/Q samples per mille, capped at 255. RF
+ * firmware 2 and older send R without it; those lines parse with clip = 0.
+ * The longest line, "R,255,255,255*HH\n", is 17 bytes, well inside
+ * C5LINK_MAX_LINE.
  *
  * SPDX-License-Identifier: MIT
  */
@@ -53,6 +58,7 @@ typedef struct {
     c5link_msg_type_t type;
     uint8_t seq;
     uint8_t rssi;
+    uint8_t clip;     /* R: clipped samples per mille, capped at 255 */
     uint16_t mhz;
     uint8_t gain;
     c5link_state_t state;
@@ -93,7 +99,8 @@ static inline size_t c5link_format(char *buf, size_t cap, const c5link_msg_t *m)
     int n;
     switch (m->type) {
     case C5LINK_MSG_RSSI:
-        n = snprintf(buf, cap, "R,%u,%u", (unsigned)m->seq, (unsigned)m->rssi);
+        n = snprintf(buf, cap, "R,%u,%u,%u", (unsigned)m->seq, (unsigned)m->rssi,
+                     (unsigned)m->clip);
         break;
     case C5LINK_MSG_STATUS:
         n = snprintf(buf, cap, "S,%u,%u,%s,%u", (unsigned)m->mhz,
@@ -159,7 +166,7 @@ static inline bool c5link_parse(const char *line, size_t len, c5link_msg_t *m)
 
     const char *p = line + 1;
     const char *end = line + plen;
-    unsigned a, b;
+    unsigned a, b, c = 0;
     memset(m, 0, sizeof(*m));
 
     switch (line[0]) {
@@ -169,10 +176,14 @@ static inline bool c5link_parse(const char *line, size_t len, c5link_msg_t *m)
     case 'R':
         if (p >= end || *p++ != ',') return false;
         if (!c5link_field_u(&p, end, 255u, &a)) return false;
-        if (!c5link_field_u(&p, end, 255u, &b) || p != end) return false;
+        if (!c5link_field_u(&p, end, 255u, &b)) return false;
+        /* Optional clip field; old RF firmware stops after rssi. */
+        if (p != end && !c5link_field_u(&p, end, 255u, &c)) return false;
+        if (p != end || p[-1] == ',') return false;
         m->type = C5LINK_MSG_RSSI;
         m->seq = (uint8_t)a;
         m->rssi = (uint8_t)b;
+        m->clip = (uint8_t)c;
         return true;
     case 'F':
         if (p >= end || *p++ != ',') return false;

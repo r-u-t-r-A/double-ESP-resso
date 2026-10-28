@@ -64,7 +64,7 @@ we build on ESP-IDF 6.0.2, whose PHY library may differ.
 
 ## 2. UART link (both boards stacked)
 
-- [ ] The AP `/status` page shows `RF Node: OK 5658 MHz gain <g> fw 2 …`.
+- [ ] The AP `/status` page shows `RF Node: OK 5658 MHz gain <g> fw 3 …`.
 - [ ] Change the channel in the web UI and save. The RF node retunes, which `/status` confirms.
 - [ ] Reset only the RF node. The AP node reapplies the frequency and gain within about 1 s.
 - [ ] With the Calibration tab open for 60 s, the `dropped` count stays at 0.

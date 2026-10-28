@@ -15,7 +15,7 @@ and tested in [`tests/test_c5link_proto.c`](../tests/test_c5link_proto.c).
 
 | Direction | Line | Meaning |
 |-----------|------|---------|
-| RF → AP | `R,<seq>,<rssi>` | One RSSI sample: `seq` 0–255 wraps, `rssi` 0–255. Sent at 1 kHz, about 14 bytes each, so ~140 kbit/s. |
+| RF → AP | `R,<seq>,<rssi>,<clip>` | One RSSI sample: `seq` 0–255 wraps, `rssi` 0–255, `clip` the capture's clipped I/Q samples per mille, capped at 255. Sent at 1 kHz, about 17 bytes each, so ~170 kbit/s, well under the 921600 baud link. RF firmware 2 and older send `R,<seq>,<rssi>`; the AP node still accepts that and reads `clip` as 0. |
 | RF → AP | `S,<mhz>,<gain>,<state>,<fw>` | Status. Sent on boot, after every command, and once a second as a heartbeat. |
 | AP → RF | `F,<mhz>` | Tune. The RF node accepts 5180–5917 MHz (R8 is the top). |
 | AP → RF | `G,<gain>` | Fixed RX gain index, 0–89. |
@@ -33,7 +33,7 @@ and tested in [`tests/test_c5link_proto.c`](../tests/test_c5link_proto.c).
 Example:
 
 ```
-R,17,142*63
+R,17,142,0*7F
 S,5732,40,OK,1*61
 F,5843*60
 ```

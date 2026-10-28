@@ -46,6 +46,7 @@ bool C5Link::poll() {
             lastSeq = m.seq;
             samples = samples + 1;
             rssi = m.rssi;
+            clip = m.clip;
             return true;
         }
     }
