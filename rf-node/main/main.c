@@ -221,7 +221,8 @@ static void measure_task(void *arg)
         ++s_count;
         taskEXIT_CRITICAL(&s_latest_mux);
 
-        c5link_msg_t m = {.type = C5LINK_MSG_RSSI, .seq = seq++, .rssi = p.rssi};
+        c5link_msg_t m = {.type = C5LINK_MSG_RSSI, .seq = seq++, .rssi = p.rssi,
+                          .clip = p.clip_permille > 255 ? 255 : (uint8_t)p.clip_permille};
         link_send(&m);
     }
 }

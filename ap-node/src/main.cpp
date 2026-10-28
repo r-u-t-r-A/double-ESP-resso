@@ -16,6 +16,29 @@ static LapTimer timer;
 static BatteryMonitor monitor;
 #ifdef C5VRX_LINK
 static RaceControl race;
+// About 18 KB (the lap trace). Written on the loop task only; parallelTask
+// and the web task just read it.
+static cal_t cal;
+static bool calSaved = false;
+
+// Start/stop requests come from the web task but run here, on the loop task,
+// so cal_start never races cal_push.
+static void handleCalibration() {
+    uint8_t startGain, laps;
+    if (ws.takeCalibStop()) cal_abort(&cal);
+    if (ws.takeCalibStart(&startGain, &laps) && race.isIdle()) {
+        cal_start(&cal, millis(), startGain, laps, config.getMinLapMs());
+        calSaved = false;
+    }
+    if (cal.state == CAL_DONE && !calSaved) {
+        calSaved = true;
+        config.setRfGain(cal.gain);
+        config.setEnterRssi(cal.enter);
+        config.setExitRssi(cal.exit);
+        DEBUG("Calibrated: gain %u enter %u exit %u separation %u\n", cal.gain, cal.enter, cal.exit,
+              cal.separation);
+    }
+}
 #endif
 #ifdef ELRS_BACKPACK
 static ElrsBackpack elrs;
@@ -24,7 +47,7 @@ static ElrsBackpack elrs;
 static void handleRadioButton(uint32_t currentTimeMs) {
     elrs_press_e press = elrs.handle(currentTimeMs, config.getElrsEnabled(), config.getElrsMac());
     elrs.debugStats(currentTimeMs);
-    if (press == ELRS_PRESS_SHORT && race.isIdle()) {
+    if (press == ELRS_PRESS_SHORT && race.isIdle() && !cal_active(&cal)) {
         buzzer.beep(60);
         race.requestBegin();
     } else if (press == ELRS_PRESS_LONG && !race.isIdle()) {
@@ -32,6 +55,9 @@ static void handleRadioButton(uint32_t currentTimeMs) {
         race.requestStop();
     }
 }
+#endif
+#ifdef PIN_SD_CS
+static SdLog sdlog;
 #endif
 #ifdef PIN_LED_STRIP
 static LedStrip ledStrip;
@@ -62,7 +88,8 @@ static void parallelTask(void *pvArgs) {
         config.handleEeprom(currentTimeMs);
         rx.handleFrequencyChange(currentTimeMs, config.getFrequency());
 #ifdef C5VRX_LINK
-        rx.handleGainChange(currentTimeMs, config.getRfGain());
+        // The calibrator owns the gain while it runs.
+        rx.handleGainChange(currentTimeMs, cal_active(&cal) ? cal.gain : config.getRfGain());
         rx.debugStats(currentTimeMs);
 #endif
 #ifdef ELRS_BACKPACK
@@ -72,6 +99,9 @@ static void parallelTask(void *pvArgs) {
         race.handleRaceControl(currentTimeMs);
 #endif
         monitor.checkBatteryState(currentTimeMs, config.getAlarmThreshold());
+#ifdef PIN_SD_CS
+        sdlog.setEnabled(config.getSdLog());
+#endif
 #ifdef PIN_LED_STRIP
         handleGateLights(currentTimeMs);
 #endif
@@ -111,6 +141,7 @@ void setup() {
     ws.setRssiSource(&rx);
     race.init(&config, &timer, &buzzer);
     ws.setRaceControl(&race);
+    ws.setCalibrator(&cal);
 #endif
 #ifdef PIN_LED_STRIP
     ledStrip.init(PIN_LED_STRIP);
@@ -121,6 +152,10 @@ void setup() {
 #endif
 #ifdef ELRS_BACKPACK
     ws.setElrsBackpack(&elrs);
+#endif
+#ifdef PIN_SD_CS
+    sdlog.init(PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, PIN_SD_CS);
+    ws.setSdLog(&sdlog);
 #endif
     led.on(400);
     buzzer.beep(200);
@@ -133,8 +168,14 @@ void loop() {
     while (rx.poll()) {
         uint32_t currentTimeMs = millis();
         timer.handleLapTimerUpdate(currentTimeMs);
+        if (cal_active(&cal)) cal_push(&cal, currentTimeMs, timer.getRssi(), rx.readClip(), rx.gainApplied(cal.gain));
         ws.pushRssiSample(currentTimeMs, rx.readRssi(), timer.getRssi());
+#ifdef PIN_SD_CS
+        sdlog.push(currentTimeMs, rx.readRssi(), timer.getRssi(), timer.isRunning(), timer.getLapSerial(),
+                   timer.peekLapTime());
+#endif
     }
+    handleCalibration();
     ElegantOTA.loop();
     delay(1);
 #else

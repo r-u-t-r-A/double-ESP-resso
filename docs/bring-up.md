@@ -37,7 +37,7 @@ we build on ESP-IDF 6.0.2, whose PHY library may differ.
   - `check=flat`: the PHY isn't receiving. Stop here.
   - `timeouts` or `short` climbing: the direct trigger doesn't match this
     IDF's engine. Every capture then falls back to the slow stock path.
-- [ ] Type `s` and check the reply `STATUS,<mhz>,<gain>,OK,2`.
+- [ ] Type `s` and check the reply `STATUS,<mhz>,<gain>,OK,3`.
 - [ ] **Spectrum orientation:** with a VTX on R1 and `f 5658`, `m` prints
   `MIRROR,5658,<pilot_db>,<mirror_db>`. The pilot should be 15–35 dB above
   the mirror. If the mirror is the higher one, flip `BP_SPECTRUM_SIGN` in
@@ -64,7 +64,7 @@ we build on ESP-IDF 6.0.2, whose PHY library may differ.
 
 ## 2. UART link (both boards stacked)
 
-- [ ] The AP `/status` page shows `RF Node: OK 5658 MHz gain <g> fw 2 …`.
+- [ ] The AP `/status` page shows `RF Node: OK 5658 MHz gain <g> fw 3 …`.
 - [ ] Change the channel in the web UI and save. The RF node retunes, which `/status` confirms.
 - [ ] Reset only the RF node. The AP node reapplies the frequency and gain within about 1 s.
 - [ ] With the Calibration tab open for 60 s, the `dropped` count stays at 0.
@@ -102,7 +102,24 @@ See [RADIO_START.md](RADIO_START.md) for the radio and backpack setup.
 - [ ] Count missed presses over 20 presses at the pilot's position.
 - [ ] Repeat the RF node noise-floor check from §3 with ESP-NOW listening.
 
-## 6. Field
+## 6. SD card logging (AP node)
+
+- [ ] Rewire for the 2026-10-25 pin move: buzzer on AP D0, link joined at **D1** (not D9), and flash both boards. `/status` shows `RF Node: OK …`.
+- [ ] Boot with no card: the Config tab's *SD card* field shows `ERROR: no card detected` in red. Insert a FAT32 card: within about 5 s it shows `OK, SDHC/SDXC, … GB free` in green, with logging still off.
+- [ ] An exFAT card (most 64 GB and larger) shows `ERROR: card found … format it as FAT32`.
+- [ ] Tick **Log RSSI to SD card** and save: within about 5 s *SD logging* shows `logging /rssi_0001_….csv` with the row count climbing at about 1000/s.
+- [ ] Note `Heap: Free` on `/status` with logging on. It should stay well above 40 KB.
+- [ ] Log for 10 minutes with the Calibration tab open: `dropped 0`, `errors 0`.
+- [ ] Run a race with laps, then **Export last 15 min**. The CSV opens in a spreadsheet, the `time` column matches the clock, and `start`, `lap` (with `lap_ms`) and `stop` rows appear where expected.
+- [ ] Pull the card while logging: *SD card* shows `ERROR: no card detected` and *SD logging* `waiting for a card`. Put it back: a new numbered file starts. Pulling it while logging is off is noticed within about 5 s too.
+- [ ] Desense: compare the RF node's noise floor and a gate pass with logging on and off.
+
+## 7. Auto-calibration
+
+- [ ] Flash both nodes (RF firmware 3 sends the clip field). Pass close to the antenna at a high gain: the Calibration tab's status line shows a non-zero clip.
+- [ ] Run Auto calibrate on a whoop track; record the locked gain, separation and lap accuracy with the date.
+
+## 8. Field
 
 - [ ] Tune the enter/exit thresholds and minimum lap time.
 - [ ] Compare lap times against video frame timing. The target is ±100 ms.

@@ -5,6 +5,10 @@ const freqOutput = document.getElementById("freqOutput");
 const announcerSelect = document.getElementById("announcerSelect");
 const announcerRateInput = document.getElementById("rate");
 const startToneSelect = document.getElementById("startTone");
+const sdLogInput = document.getElementById("sdLog");
+const sdStatusDisplay = document.getElementById("sdstatus");
+const sdCardDisplay = document.getElementById("sdcard");
+const exportLogButton = document.getElementById("exportLogButton");
 const enterRssiInput = document.getElementById("enter");
 const exitRssiInput = document.getElementById("exit");
 const enterRssiSpan = document.getElementById("enterSpan");
@@ -32,6 +36,8 @@ var raceCtl = false;
 // Start tone source as saved on the AP node: 0 = its buzzer, 1 = this browser.
 // Firmware without the setting leaves it at 1 (browser tone, as upstream).
 var startTone = 1;
+// AP node has an SD card logger (1 kHz RSSI).
+var sdLog = false;
 
 // double-ESP-resso: the C5 RF node tunes 5180-5917 MHz only (R8 is the top).
 var rfNode = false;
@@ -64,6 +70,18 @@ var timerInterval;
 const timer = document.getElementById("timer");
 const startRaceButton = document.getElementById("startRaceButton");
 const stopRaceButton = document.getElementById("stopRaceButton");
+// A race is arming or running; set from the buttons and the race SSE events.
+var raceRunning = false;
+
+// Auto-calibration (RF node builds): GET /calib is polled while it runs.
+const calStartButton = document.getElementById("calStartButton");
+const calStopButton = document.getElementById("calStopButton");
+const calStartGainInput = document.getElementById("calStartGain");
+const calLapsInput = document.getElementById("calLaps");
+const calStatusDisplay = document.getElementById("calStatus");
+var calActive = false;
+var calPolling = false;
+var calSeq = 0; // last calibration event spoken
 
 const batteryVoltageDisplay = document.getElementById("bvolt");
 
@@ -108,6 +126,7 @@ onload = function (e) {
         rfNode = true;
         rfGainInput.value = config.rfGain;
         document.querySelectorAll(".rfnode-only").forEach((el) => (el.style.display = ""));
+        resumeCalibration();
       }
       if (config.ledCount !== undefined) {
         ledStrip = true;
@@ -125,6 +144,13 @@ onload = function (e) {
         startToneSelect.value = startTone;
         document.querySelectorAll(".racectl-only").forEach((el) => (el.style.display = ""));
       }
+      if (config.sdLog !== undefined) {
+        sdLog = true;
+        sdLogInput.checked = !!config.sdLog;
+        document.querySelectorAll(".sdlog-only").forEach((el) => (el.style.display = ""));
+        // The AP node has no clock: lend it ours for log file names and export times.
+        fetch(`/clock?now=${Date.now()}&tz=${-new Date().getTimezoneOffset()}`, { method: "POST" }).catch(() => {});
+      }
       if (config.elrsUid !== undefined) {
         elrsBackpack = true;
         showElrsConfig(config);
@@ -132,7 +158,7 @@ onload = function (e) {
       }
       populateFreqOutput();
       stopRaceButton.disabled = true;
-      startRaceButton.disabled = false;
+      startRaceButton.disabled = calActive;
       clearInterval(timerInterval);
       timer.innerHTML = "00:00:00s";
       clearLaps();
@@ -149,6 +175,17 @@ function getBatteryVoltage() {
       batteryVoltageDisplay.innerText = batteryVoltage;
       const rfMatch = response.match(/RF Node:\s*([^\n]*)/);
       if (rfNode && rfMatch) rfStatusDisplay.innerText = rfMatch[1];
+      const sdCardMatch = response.match(/SD Card:\s*([^\n]*)/);
+      if (sdLog && sdCardMatch) {
+        sdCardDisplay.innerText = sdCardMatch[1];
+        sdCardDisplay.style.color = sdCardMatch[1].startsWith("OK")
+          ? "#2e9e3e"
+          : sdCardMatch[1].startsWith("ERROR")
+            ? "#d33"
+            : "";
+      }
+      const sdMatch = response.match(/SD Logging:\s*([^\n]*)/);
+      if (sdLog && sdMatch) sdStatusDisplay.innerText = sdMatch[1];
     });
 }
 
@@ -313,6 +350,7 @@ function saveConfig() {
       pwd: pwdInput.value,
       ...(rfNode ? { rfGain: Math.max(0, Math.min(89, parseInt(rfGainInput.value) || 0)) } : {}),
       ...(raceCtl ? { startTone: parseInt(startToneSelect.value) || 0 } : {}),
+      ...(sdLog ? { sdLog: sdLogInput.checked ? 1 : 0 } : {}),
       ...(ledStrip
         ? {
             ledOn: ledOnInput.checked ? 1 : 0,
@@ -417,6 +455,36 @@ function playTone(durationMs, frequency, fadeS) {
   gain.gain.exponentialRampToValueAtTime(0.00001, fadeAt + fadeS);
   osc.start(t0);
   osc.stop(fadeAt + fadeS);
+}
+
+// Downloads the newest SD log's last `minutes` as CSV, with this browser's
+// clock for the wall-clock column.
+async function exportRssiLog(minutes) {
+  const label = exportLogButton.textContent;
+  exportLogButton.disabled = true;
+  exportLogButton.textContent = "Exporting...";
+  try {
+    const tz = -new Date().getTimezoneOffset();
+    const response = await fetch(`/sdlog/export?min=${minutes}&now=${Date.now()}&tz=${tz}`);
+    if (!response.ok) {
+      alert("RSSI log export failed: " + (await response.text()));
+      return;
+    }
+    const blob = await response.blob();
+    const match = /filename="([^"]+)"/.exec(response.headers.get("Content-Disposition") || "");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = match ? match[1] : "rssi_log.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+  } catch (e) {
+    alert("RSSI log export failed: " + e);
+  } finally {
+    exportLogButton.disabled = false;
+    exportLogButton.textContent = label;
+  }
 }
 
 function addLap(lapStr) {
@@ -565,13 +633,16 @@ function doSpeak(obj) {
 
 async function startRace() {
   startRaceButton.disabled = true;
+  setRaceRunning(true);
   // Create the tone context on this click: browsers only allow audio after a gesture.
   if (raceCtl && startTone == 1 && !toneCtx) toneCtx = new AudioContext();
   if (raceCtl) {
     // The AP node runs the countdown and reports it through raceArm/raceStart.
-    fetch("/timer/begin", { method: "POST" }).catch(() => {
-      startRaceButton.disabled = false;
-    });
+    fetch("/timer/begin", { method: "POST" })
+      .then((response) => {
+        if (!response.ok) setRaceRunning(false); // 409 while calibrating
+      })
+      .catch(() => setRaceRunning(false));
     return;
   }
   // Gate lights go red for the countdown (ignored by boards without a strip).
@@ -618,7 +689,7 @@ function stopRace() {
     .then((response) => console.log("/timer/stop:" + JSON.stringify(response)));
 
   stopRaceButton.disabled = true;
-  startRaceButton.disabled = false;
+  setRaceRunning(false);
 
   lapNo = -1;
   lapTimes = [];
@@ -680,6 +751,7 @@ if (!!window.EventSource) {
   // Staging as in RotorHazard: "Arm your quad", three staging tones 1 s
   // apart (raceTone), then the start tone 0.5-4 s after the last one.
   source.addEventListener("raceArm", function (e) {
+    setRaceRunning(true);
     startRaceButton.disabled = true;
     stopRaceButton.disabled = false;
     queueSpeak("<p>Arm your quad</p>");
@@ -692,6 +764,7 @@ if (!!window.EventSource) {
   source.addEventListener("raceStart", function (e) {
     if (startTone == 1) playTone(700, 880, 0.25);
     startTimerDisplay();
+    setRaceRunning(true);
     startRaceButton.disabled = true;
     stopRaceButton.disabled = false;
   });
@@ -701,10 +774,158 @@ if (!!window.EventSource) {
     clearInterval(timerInterval);
     timer.innerHTML = "00:00:00s";
     stopRaceButton.disabled = true;
-    startRaceButton.disabled = false;
+    setRaceRunning(false);
     lapNo = -1;
     lapTimes = [];
   });
+}
+
+function setRaceRunning(running) {
+  raceRunning = running;
+  startRaceButton.disabled = running || calActive;
+  calStartButton.disabled = running || calActive;
+}
+
+function setCalActive(active) {
+  calActive = active;
+  calStopButton.disabled = !active;
+  calStartButton.disabled = active || raceRunning;
+  startRaceButton.disabled = active || raceRunning;
+}
+
+function clampInt(value, min, max, fallback) {
+  const v = parseInt(value);
+  return isNaN(v) ? fallback : Math.max(min, Math.min(max, v));
+}
+
+// What the voice says for each calibration event. arg is the event's gain,
+// lap count or lap number (see ap-node/lib/CALIBRATION/calibration.h).
+function calibSpeech(name, arg, status) {
+  switch (name) {
+    case "started":
+      return "Calibration. Take off and fly your normal line.";
+    case "fly_through":
+      return "Fly through the gate now.";
+    case "clipped":
+      return `Too strong. Gain ${arg}. Fly through again.`;
+    case "pass_clean":
+      return "Good.";
+    case "no_pass":
+      return "No pass seen. Fly through the gate now.";
+    case "gain_locked":
+      return `Gain set to ${arg}.`;
+    case "fly_laps":
+      return `Now fly ${arg} laps through the gate.`;
+    case "lap_seen":
+      return `Lap ${arg}.`;
+    case "done":
+      return `Calibration done. Separation ${Math.round(status.sepDb)} decibels. Enter ${status.enter}, exit ${status.exit}.`;
+    case "fail_too_strong":
+      return "Signal too strong even at minimum gain. Move or turn the antenna.";
+    case "fail_no_signal":
+      return "No gate passes seen. Calibration stopped.";
+    case "fail_no_separation":
+      return "The gate can't be told apart from the rest of the track. Re-aim the antenna across the gate and try again.";
+    case "aborted":
+      return "Calibration stopped.";
+    default:
+      return "";
+  }
+}
+
+function showCalibStatus(s) {
+  let text = `${s.state.replace("_", " ")}, gain ${s.gain}`;
+  if (s.lastPeak) text += `, last peak ${s.lastPeak} clip ${s.lastClip}‰`;
+  if (s.state === "record_laps") text += `, laps ${s.lapsSeen}/${s.lapsWanted}`;
+  if (s.state === "done") text += `, enter ${s.enter} exit ${s.exit}, separation ${s.sepDb.toFixed(1)} dB`;
+  if (s.state === "failed") text += ` (${s.event.replace(/_/g, " ")})`;
+  calStatusDisplay.textContent = text;
+}
+
+// The firmware already saved the result; only show it.
+function reloadThresholds() {
+  fetch("/config")
+    .then((response) => response.json())
+    .then((config) => {
+      enterRssi = config.enterRssi;
+      exitRssi = config.exitRssi;
+      enterRssiInput.value = enterRssi;
+      exitRssiInput.value = exitRssi;
+      enterRssiSpan.textContent = enterRssi;
+      exitRssiSpan.textContent = exitRssi;
+      if (config.rfGain !== undefined) rfGainInput.value = config.rfGain;
+    });
+}
+
+async function pollCalibration() {
+  if (calPolling) return;
+  calPolling = true;
+  setCalActive(true);
+  while (calPolling) {
+    try {
+      const s = await (await fetch("/calib")).json();
+      for (const [seq, name, arg] of s.events || []) {
+        if (seq <= calSeq) continue;
+        calSeq = seq;
+        const text = calibSpeech(name, arg, s);
+        if (text) queueSpeak(`<p>${text}</p>`);
+      }
+      showCalibStatus(s);
+      if (s.state === "done" || s.state === "failed" || s.state === "idle") {
+        if (s.state === "done") reloadThresholds();
+        break;
+      }
+    } catch (e) {
+      console.log("/calib:", e);
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  calPolling = false;
+  setCalActive(false);
+}
+
+async function startCalibration() {
+  // Not awaited: the voice loop runs until voice is disabled.
+  if (!audioEnabled) enableAudioLoop();
+  calStartButton.disabled = true;
+  try {
+    const response = await fetch("/calib/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        startGain: clampInt(calStartGainInput.value, 5, 89, 45),
+        laps: clampInt(calLapsInput.value, 1, 20, 3),
+      }),
+    });
+    const r = await response.json();
+    if (!response.ok) {
+      calStatusDisplay.textContent = r.status === "busy" ? "stop the race first" : "start refused";
+      setCalActive(false);
+      return;
+    }
+    calSeq = r.seq; // speak only this run's events
+    pollCalibration();
+  } catch (e) {
+    calStatusDisplay.textContent = "start failed";
+    setCalActive(false);
+  }
+}
+
+function stopCalibration() {
+  fetch("/calib/stop", { method: "POST" }).catch(() => {});
+}
+
+// A calibration started from another page or before a reload: follow it quietly.
+function resumeCalibration() {
+  fetch("/calib")
+    .then((response) => (response.ok ? response.json() : null))
+    .then((s) => {
+      if (!s) return;
+      calSeq = s.seq;
+      showCalibStatus(s);
+      if (!["idle", "done", "failed"].includes(s.state)) pollCalibration();
+    })
+    .catch(() => {});
 }
 
 function setBandChannelIndex(freq) {

@@ -34,6 +34,8 @@ class LapTimer {
     uint32_t getLapSerial() { return lapSerial; }
 #ifdef C5VRX_LINK
     uint32_t getRaceStartMs() { return raceStartTimeMs; }
+    // The newest lap time, without consuming it like getLapTime() does.
+    uint32_t peekLapTime() { return lapTimes[lapCount == 0 ? LAPTIMER_LAP_HISTORY - 1 : lapCount - 1]; }
 #endif
 
    private:

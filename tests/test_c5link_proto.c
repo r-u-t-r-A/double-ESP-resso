@@ -24,7 +24,19 @@ int main(void)
 
     c5link_msg_t r = {.type = C5LINK_MSG_RSSI, .seq = 255, .rssi = 0};
     assert(roundtrip(&r, &out) == 1);
-    assert(out.type == C5LINK_MSG_RSSI && out.seq == 255 && out.rssi == 0);
+    assert(out.type == C5LINK_MSG_RSSI && out.seq == 255 && out.rssi == 0 && out.clip == 0);
+
+    /* 4-field R line with the clip field, at the longest length. */
+    c5link_msg_t rc = {.type = C5LINK_MSG_RSSI, .seq = 255, .rssi = 255, .clip = 255};
+    assert(roundtrip(&rc, &out) == 1);
+    assert(out.type == C5LINK_MSG_RSSI && out.seq == 255 && out.rssi == 255 && out.clip == 255);
+    {
+        char lb[C5LINK_MAX_LINE + 4];
+        size_t ln = c5link_format(lb, sizeof(lb), &rc);
+        assert(ln == 17 && memcmp(lb, "R,255,255,255*", 14) == 0);
+    }
+    rc.clip = 14;
+    assert(roundtrip(&rc, &out) == 1 && out.clip == 14);
 
     c5link_msg_t s = {.type = C5LINK_MSG_STATUS, .mhz = 5732, .gain = 40,
                       .state = C5LINK_ST_ERR_FREQ, .version = 3};
@@ -47,8 +59,30 @@ int main(void)
     assert(n == 10 && memcmp(buf, "F,5880*", 7) == 0);
 
     /* Examples documented in docs/protocol.md. */
-    const char *doc[] = {"R,17,142*63", "S,5732,40,OK,1*61", "F,5843*60"};
-    for (size_t i = 0; i < 3; ++i) assert(c5link_parse(doc[i], strlen(doc[i]), &out));
+    const char *doc[] = {"R,17,142,0*7F", "R,17,142*63", "S,5732,40,OK,1*61", "F,5843*60"};
+    for (size_t i = 0; i < sizeof(doc) / sizeof(doc[0]); ++i)
+        assert(c5link_parse(doc[i], strlen(doc[i]), &out));
+
+    /* Legacy 3-field R line from old RF firmware: clip reads 0. */
+    {
+        char lb[32];
+        strcpy(lb, "R,9,200");
+        size_t ln = c5link_seal(lb, sizeof(lb), 7);
+        assert(c5link_parse(lb, ln - 1, &out));
+        assert(out.type == C5LINK_MSG_RSSI && out.seq == 9 && out.rssi == 200 && out.clip == 0);
+    }
+
+    /* R lines with a bad clip field, even with a valid checksum. */
+    {
+        const char *badr[] = {"R,1,2,256", "R,1,2,3,4", "R,1,2,", "R,1,2,3,", "R,1,2,x"};
+        for (size_t i = 0; i < sizeof(badr) / sizeof(badr[0]); ++i) {
+            char lb[32];
+            size_t pl = strlen(badr[i]);
+            strcpy(lb, badr[i]);
+            size_t ln = c5link_seal(lb, sizeof(lb), pl);
+            assert(!c5link_parse(lb, ln - 1, &out));
+        }
+    }
 
     /* Rejections. */
     const char *bad[] = {

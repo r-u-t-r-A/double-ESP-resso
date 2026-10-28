@@ -16,7 +16,7 @@ boards** and no RX5808 module.
 
 ```
  drone VTX ~~ 5.8 GHz ~~>  [ RF node  XIAO ESP32-C5 ]  raw I/Q -> band power -> RSSI 0-255 @ 1 kHz
-                                 |  D5/D9 UART, both directions
+                                 |  D1/D5 UART, both directions
                            [ AP node  XIAO ESP32-C5 ]  PhobosLT lap logic + web UI
  phone / laptop <~~ 2.4 GHz Wi-Fi AP "PhobosLT_xxxxxx" ~~
 ```
@@ -51,14 +51,16 @@ Every frequency is tuned the same way: the PLL is set directly, with the LO
 
 - 2 × Seeed Studio XIAO ESP32-C5.
 - Optional:
-  - A buzzer on the AP node's D8.
+  - A buzzer on the AP node's D0.
   - A 1S battery on the AP node's battery pads.
-  - A **WS2812B strip around the gate** on the AP node's D4, with its own
-    5 V supply. See [docs/hardware.md](docs/hardware.md#ws2812b-gate-led-strip-ap-node-d4).
+  - A **WS2812B strip around the gate** on the AP node's D2, with its own
+    5 V supply. See [docs/hardware.md](docs/hardware.md#ws2812b-gate-led-strip-ap-node-d2).
+  - A **microSD card** on the AP node's SPI pins (D8–D10, CS on D4) for 1 kHz
+    RSSI logging. See [docs/hardware.md](docs/hardware.md#microsd-card-ap-node-spi).
 
-**Join only these four pins between the boards:** 5V, GND, D5 and D9. D2/D3
-are strapping pins and D6/D7 carry the UART0 console, so a full pin-to-pin
-stack is not safe. See
+**Join only these four pins between the boards:** 5V, GND, D1 and D5. D2/D3
+are strapping pins, D6/D7 carry the UART0 console and D8–D10 the SD card, so a
+full pin-to-pin stack is not safe. See
 [docs/hardware.md](docs/hardware.md).
 
 ## Repository layout
@@ -69,7 +71,7 @@ stack is not safe. See
 | `ap-node/` | PlatformIO / Arduino PhobosLT fork for the AP node. MIT, from PhobosLT. |
 | `common/c5link_proto.h` | The shared UART line protocol (MIT). See [docs/protocol.md](docs/protocol.md). |
 | `tools/rssi_log.py` | Records and plots RF node RSSI over USB, for calibration. |
-| `tests/` | Host unit tests: protocol, band-power meter, ELRS, LED strip, RSSI stream. |
+| `tests/` | Host unit tests: protocol, band-power meter, ELRS, LED strip, RSSI stream, SD log rows. |
 
 ## Documentation
 
@@ -125,6 +127,8 @@ cc -std=c99 -Wall -Wextra -Werror -I common tests/test_c5link_proto.c -o /tmp/t_
 cc -std=c99 -Wall -Wextra -Werror -I rf-node/main tests/test_band_power.c -lm -o /tmp/t_bp && /tmp/t_bp
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/ELRSBACKPACK tests/test_elrs_msp.c -o /tmp/t_elrs && /tmp/t_elrs
 cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/LEDSTRIP tests/test_ledstrip_timing.c -o /tmp/t_led && /tmp/t_led
+cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/RSSISTREAM tests/test_rssi_stream.c -o /tmp/t_stream && /tmp/t_stream
+cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/SDLOG tests/test_sdlog_row.c -o /tmp/t_sdlog && /tmp/t_sdlog
 ```
 
 ## Using it
@@ -134,10 +138,21 @@ cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/LEDSTRIP tests/test_ledstrip_ti
 2. **Configuration tab:** pick the band and channel (for example R1, R3, R6 or
    R7) and press *Save Configuration*. The *RF node* line should show
    `OK <MHz> MHz …` within a second.
-3. **Calibration tab:** watch the live RSSI while you fly or carry the quad
-   through the gate.
-   - If the peak flat-lines at 255, lower the *RF node gain*.
-   - Set *Enter* just below the gate-pass peak and *Exit* well above the
+3. **Calibration tab:** press *Auto calibrate* and take off. The timer turns
+   voice on and talks you through it while you fly normal laps:
+   - "Fly through the gate now": fly through once. If the pass clipped the
+     receiver ("Too strong"), the timer lowers the gain and asks again, until
+     two passes in a row are clean.
+   - "Now fly 3 laps": fly your normal line; each counted lap is called out.
+   - At the end it says the separation in dB and the Enter and Exit values,
+     and saves them with the gain. The sliders and the chart lines move to
+     the new values.
+   - Aim the antenna across the gate opening, away from the rest of the
+     track. If the timer says the gate can't be told apart from the track,
+     re-aim it and try again.
+   - *Stop* cancels; the previous gain and thresholds stay. You can still set
+     them by hand: if the peak flat-lines at 255, lower the *RF node gain*,
+     set *Enter* just below the gate-pass peak and *Exit* well above the
      far-away level, then save.
 4. **Race tab:** press *Start Race*.
 
@@ -147,6 +162,34 @@ For finer calibration without the AP node, plug the RF node in over USB and run:
 tools/rssi_log.py /dev/ttyACM0 --freq 5732 --gain 30 --seconds 60 -o pass.csv
 tools/rssi_log.py --plot pass.csv
 ```
+
+## RSSI logging to SD
+
+With a microSD card fitted, tick **Log RSSI to SD card (1 kHz)** on the Config
+tab and save. The AP node then writes every sample the lap timer sees, about
+105 MB per hour, until you untick it.
+
+Under the checkbox, two fields show the card's state:
+
+- **SD card** is checked every 5 s, whether logging is on or not. It shows `OK`
+  with the card type, size and free space in green. It shows an error in red
+  when no card answers (check the wiring and the card), or when a card answers
+  but can't be read. Use FAT32: cards of 64 GB and up usually come as exFAT.
+- **SD logging** shows the current file, row count, and any dropped samples or
+  write errors.
+
+- One file per logging session, numbered: `rssi_0007_20261025-1802.csv`. The
+  date comes from the browser when the page loads; without it the file is just
+  `rssi_0007.csv`.
+- Columns: `ms` (AP node time), `raw` (RSSI from the RF node), `filtered` (what
+  the lap timer compares with Enter/Exit), `event` (`S` race start, `X` stop,
+  `L` lap, `-` none) and `lap_ms` (the lap time, on lap rows).
+- **Export last 15 min of RSSI log** under the Calibration graph downloads the
+  end of the newest file as a CSV with a wall-clock `time` column. That's about
+  38 MB and takes one to two minutes over the timer's Wi-Fi. For whole
+  sessions, put the card in a computer.
+- The file is saved every second, so pulling the power loses about a second.
+  Untick logging before you take the card out.
 
 ## Gate lights
 

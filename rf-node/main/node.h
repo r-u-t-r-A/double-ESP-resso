@@ -11,8 +11,9 @@
 #include "c5link_proto.h"
 #include "iq_power.h"
 
-/* 2: raw I/Q band-power meter (FPVGate C5MK method). */
-#define NODE_FW_VERSION 2u
+/* 2: raw I/Q band-power meter (FPVGate C5MK method).
+ * 3: R lines carry the capture's clip per mille. */
+#define NODE_FW_VERSION 3u
 
 /* Applies an AP->RF command (F, G or Q). Blocks while retuning.
  * Always leaves the resulting status in *status. */

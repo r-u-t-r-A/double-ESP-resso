@@ -19,9 +19,10 @@
 */
 
 //double-ESP-resso: Seeed XIAO ESP32-C5 stacked on the RF node XIAO.
-//Only 5V, GND, D5 and D9 are joined; the RF node drives its IQ bus on D0-D3/D10.
-//D6/D7 (GPIO11/12) are the C5 UART0 console pins: the core's log output is
-//driven out on GPIO11, so they cannot carry the link.
+//Only 5V, GND, D1 and D5 are joined between the boards. D8-D10 are the XIAO's
+//SPI pins and carry the SD card. D6/D7 (GPIO11/12) are the C5 UART0 console
+//pins: the core's log output is driven out on GPIO11, so they cannot carry the
+//link. D2/D3 are strapping pins.
 #if defined(C5VRX_LINK)
 
 #define PIN_LED 27            //XIAO user LED, active low
@@ -31,9 +32,13 @@
 #define VBAT_SCALE 2
 #define VBAT_ADD 2
 #define PIN_C5LINK_RX 24      //D5 <- RF node TX
-#define PIN_C5LINK_TX 9       //D9 -> RF node RX
-#define PIN_BUZZER 8          //D8
-#define PIN_LED_STRIP 25      //D4, WS2812B data (330R series resistor)
+#define PIN_C5LINK_TX 0       //D1 -> RF node RX
+#define PIN_BUZZER 1          //D0
+#define PIN_LED_STRIP 25      //D2, WS2812B data (330R series resistor)
+#define PIN_SD_SCK 8          //D8, microSD over SPI (XIAO SCK)
+#define PIN_SD_MISO 9         //D9 (XIAO MISO)
+#define PIN_SD_MOSI 10        //D10 (XIAO MOSI)
+#define PIN_SD_CS 23          //D4: the XIAO's SS (D3) is a strapping pin
 #define BUZZER_INVERTED false
 #define DEFAULT_FREQUENCY 5658 //R1
 #define DEFAULT_RF_GAIN 35
@@ -100,7 +105,7 @@
 #define CONFIG_JSON_SIZE 640
 #define CONFIG_MAGIC_MASK (0b11U << 30)
 #define CONFIG_MAGIC (0b01U << 30)
-#define CONFIG_VERSION 5U
+#define CONFIG_VERSION 6U
 #define ELRS_MAC_LEN 6
 
 // Who plays the race start tone (C5VRX_LINK builds). The browser's Web Audio
@@ -137,6 +142,8 @@ typedef struct {
     uint8_t ledOrder;
     // v5: START_TONE_BUZZER or START_TONE_BROWSER.
     uint8_t startTone;
+    // v6: log 1 kHz RSSI to the SD card (PIN_SD_CS builds).
+    uint8_t sdLog;
 } laptimer_config_t;
 
 class Config {
@@ -163,10 +170,17 @@ class Config {
     uint8_t getLedOrder();
     uint8_t getAnnouncerRate();
     uint8_t getStartTone();
+    bool getSdLog();
     bool getElrsEnabled();
     const uint8_t* getElrsMac();
     char* getSsid();
     char* getPassword();
+#ifdef C5VRX_LINK
+    // Auto-calibration results; saved by handleEeprom like a web UI change.
+    void setEnterRssi(uint8_t rssi);
+    void setExitRssi(uint8_t rssi);
+    void setRfGain(uint8_t gain);
+#endif
 
    private:
     laptimer_config_t conf;

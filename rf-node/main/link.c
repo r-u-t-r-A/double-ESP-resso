@@ -2,7 +2,8 @@
  * link.c - UART link from the RF node to the AP node.
  *
  * Stacked XIAO boards connect pin-to-pin, so the roles cross in firmware:
- * this node transmits on D5 (GPIO24) and receives on D9 (GPIO9).
+ * this node transmits on D5 (GPIO24) and receives on D1 (GPIO0). D9 is not
+ * joined: on the AP node it is the SD card's MISO.
  *
  * Not D6/D7: GPIO11/12 are the ESP32-C5 UART0 console pins. Both chips'
  * ROM boot logs, and the Arduino AP node's whole console, are driven out on
@@ -20,7 +21,7 @@
 
 #define LINK_UART      UART_NUM_1
 #define LINK_TX_GPIO   24 /* XIAO D5 */
-#define LINK_RX_GPIO   9  /* XIAO D9 */
+#define LINK_RX_GPIO   0  /* XIAO D1 */
 #define LINK_TX_BUF    2048
 #define LINK_RX_BUF    512
 #define HEARTBEAT_US   1000000

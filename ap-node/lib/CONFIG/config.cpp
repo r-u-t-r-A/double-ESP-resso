@@ -34,7 +34,7 @@ void Config::load(void) {
     }
 
     // v2 -> v3 appended the ELRS fields, v3 -> v4 the LED chip and order,
-    // v4 -> v5 the start tone source.
+    // v4 -> v5 the start tone source, v5 -> v6 SD logging.
     if (version == 2U) {
         memset(conf.elrsMac, 0, sizeof(conf.elrsMac));
         conf.elrsEnabled = 0;
@@ -50,6 +50,11 @@ void Config::load(void) {
     if (version == 4U) {
         conf.startTone = START_TONE_BUZZER;
         version = 5U;
+        modified = true;
+    }
+    if (version == 5U) {
+        conf.sdLog = 0;
+        version = 6U;
         modified = true;
     }
     if (version == CONFIG_VERSION) conf.version = CONFIG_VERSION | CONFIG_MAGIC;
@@ -99,6 +104,9 @@ void Config::toJson(AsyncResponseStream& destination) {
 #ifdef C5VRX_LINK
     config["raceCtl"] = 1;
     config["startTone"] = conf.startTone;
+#endif
+#ifdef PIN_SD_CS
+    config["sdLog"] = conf.sdLog;
 #endif
 #ifdef ELRS_BACKPACK
     char mac[18];
@@ -218,6 +226,15 @@ void Config::fromJson(JsonObject source) {
         }
     }
 #endif
+#ifdef PIN_SD_CS
+    if (source["sdLog"].is<int>()) {
+        uint8_t on = source["sdLog"] ? 1 : 0;
+        if (on != conf.sdLog) {
+            conf.sdLog = on;
+            modified = true;
+        }
+    }
+#endif
 #ifdef C5VRX_LINK
     if (source["startTone"].is<int>()) {
         int t = source["startTone"];
@@ -273,6 +290,10 @@ uint8_t Config::getStartTone() {
     return conf.startTone;
 }
 
+bool Config::getSdLog() {
+    return conf.sdLog != 0;
+}
+
 bool Config::getElrsEnabled() {
     return conf.elrsEnabled != 0;
 }
@@ -304,6 +325,26 @@ uint8_t Config::getExitRssi() {
 uint8_t Config::getRfGain() {
     return conf.rfGain;
 }
+
+#ifdef C5VRX_LINK
+void Config::setEnterRssi(uint8_t rssi) {
+    if (conf.enterRssi == rssi) return;
+    conf.enterRssi = rssi;
+    modified = true;
+}
+
+void Config::setExitRssi(uint8_t rssi) {
+    if (conf.exitRssi == rssi) return;
+    conf.exitRssi = rssi;
+    modified = true;
+}
+
+void Config::setRfGain(uint8_t gain) {
+    if (conf.rfGain == gain) return;
+    conf.rfGain = gain;
+    modified = true;
+}
+#endif
 
 bool Config::getLedEnabled() {
     return conf.ledEnabled != 0;

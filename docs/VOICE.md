@@ -5,7 +5,7 @@ Speech API, wrapped by `ap-node/data/articulate.min.js`). Nothing is synthesised
 on the ESP32. The start tone is separate from voice. The **Start tone**
 setting on the Config tab picks where it plays:
 
-- **AP node buzzer** (the default): the buzzer on the AP node's D8 plays the
+- **AP node buzzer** (the default): the buzzer on the AP node's D0 plays the
   three staging tones and the start tone, exactly on time. The browser plays
   no tones.
 - **Browser**: Web Audio in the browser (RotorHazard's 440 Hz staging and
@@ -31,6 +31,10 @@ Voice needs two things:
 3. Click **Save Configuration**.
 4. Click **Enable voice**.
 5. Click **Test voice**. You should hear "testing sound for pilot …, 1, 2, 3".
+
+*Auto calibrate* on the Calibration tab turns voice on by itself and speaks
+its prompts ("Fly through the gate now", "Lap 1", …) whatever the announcer
+type is.
 
 The **Enable voice** setting is not saved. Click it again after every page
 reload, or no announcements are spoken. Until you click it, the start tone is

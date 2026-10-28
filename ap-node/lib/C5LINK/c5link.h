@@ -24,6 +24,11 @@ class C5Link {
     // Call repeatedly until it returns false.
     bool poll();
     uint8_t readRssi();
+    // Clipped I/Q samples per mille of the last sample's capture (0 from RF fw <= 2).
+    uint8_t readClip() { return clip; }
+    // Gain from the RF node's last status, and whether it reports gain g.
+    uint8_t currentGain() { return rfGain; }
+    bool gainApplied(uint8_t g) { return statusSeen && rfGain == g; }
 
     // Called periodically with the desired settings from Config.
     void handleFrequencyChange(uint32_t currentTimeMs, uint16_t freqMhz);
@@ -45,6 +50,7 @@ class C5Link {
     c5link_rx_t rx;
 
     volatile uint8_t rssi = 0;
+    volatile uint8_t clip = 0;
     bool haveSeq = false;
     uint8_t lastSeq = 0;
     volatile uint32_t samples = 0;

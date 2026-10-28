@@ -15,7 +15,7 @@ and tested in [`tests/test_c5link_proto.c`](../tests/test_c5link_proto.c).
 
 | Direction | Line | Meaning |
 |-----------|------|---------|
-| RF → AP | `R,<seq>,<rssi>` | One RSSI sample: `seq` 0–255 wraps, `rssi` 0–255. Sent at 1 kHz, about 14 bytes each, so ~140 kbit/s. |
+| RF → AP | `R,<seq>,<rssi>,<clip>` | One RSSI sample: `seq` 0–255 wraps, `rssi` 0–255, `clip` the capture's clipped I/Q samples per mille, capped at 255. Sent at 1 kHz, about 17 bytes each, so ~170 kbit/s, well under the 921600 baud link. RF firmware 2 and older send `R,<seq>,<rssi>`; the AP node still accepts that and reads `clip` as 0. |
 | RF → AP | `S,<mhz>,<gain>,<state>,<fw>` | Status. Sent on boot, after every command, and once a second as a heartbeat. |
 | AP → RF | `F,<mhz>` | Tune. The RF node accepts 5180–5917 MHz (R8 is the top). |
 | AP → RF | `G,<gain>` | Fixed RX gain index, 0–89. |
@@ -33,7 +33,7 @@ and tested in [`tests/test_c5link_proto.c`](../tests/test_c5link_proto.c).
 Example:
 
 ```
-R,17,142*63
+R,17,142,0*7F
 S,5732,40,OK,1*61
 F,5843*60
 ```
@@ -103,3 +103,45 @@ data: 81234,1052310,8A8C8F,868687,001
 ```
 
 Try it with `curl -N http://20.0.0.1/rssi`.
+
+## Calibration endpoints (AP node HTTP)
+
+Auto-calibration runs on the AP node
+([`ap-node/lib/CALIBRATION/calibration.h`](../ap-node/lib/CALIBRATION/calibration.h),
+tested by [`tests/test_calibration.c`](../tests/test_calibration.c)). The web UI
+drives it and speaks its events.
+
+| Request | Meaning |
+|---------|---------|
+| `POST /calib/start` | Start. Optional JSON body `{"startGain":45,"laps":3}` (gain 5–89, laps 1–20). Replies `{"status":"OK","seq":<n>}`; events after `seq` belong to this run. Replies 409 `{"status":"busy"}` while a race runs or counts down. |
+| `POST /calib/stop` | Abort. The configured gain and thresholds are kept. |
+| `GET /calib` | Current state, polled every 250 ms by the web UI. |
+
+While calibration runs, `/timer/start` and `/timer/begin` reply 409
+`{"status":"calibrating"}`, and the ELRS radio start is ignored. On success the
+AP node saves `rfGain`, `enterRssi` and `exitRssi` to its config itself.
+
+Example `GET /calib`:
+
+```json
+{"state":"wait_pass","event":"fly_through","seq":12,"gain":41,"lastPeak":238,"lastClip":14,
+ "clean":1,"lapsSeen":0,"lapsWanted":3,"enter":0,"exit":0,"sepDb":0.0,
+ "events":[[10,"clipped",41],[11,"pass_clean",41],[12,"fly_through",41]]}
+```
+
+- **`state`:** `idle`, `starting` (request not yet taken by the lap timer
+  loop), `set_gain`, `settle`, `wait_pass`, `pass_tail`, `record_laps`, `done`
+  or `failed`.
+- **`event` / `seq`:** the newest event, and its number. `seq` keeps counting
+  across runs.
+- **`events`:** the last 8 events as `[seq, name, arg]`, so a poll that missed
+  one can still speak it. `arg` is the gain for `started`, `fly_through`,
+  `clipped`, `pass_clean`, `no_pass` and `gain_locked`, the laps to fly for
+  `fly_laps`, and the lap number for `lap_seen`.
+  Other names: `done`, `fail_too_strong`, `fail_no_signal`,
+  `fail_no_separation`, `aborted`.
+- **`lastPeak` / `lastClip`:** the filtered peak and the highest clip per mille
+  of the last judged pass.
+- **`clean`:** clean passes in a row at the current gain.
+- **`enter` / `exit` / `sepDb`:** the result once `state` is `done`. `sepDb` is
+  the width of the band of working Enter values, in dB (4.25 counts per dB).
