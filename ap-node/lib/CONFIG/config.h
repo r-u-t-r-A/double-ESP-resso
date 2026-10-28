@@ -175,6 +175,12 @@ class Config {
     const uint8_t* getElrsMac();
     char* getSsid();
     char* getPassword();
+#ifdef C5VRX_LINK
+    // Auto-calibration results; saved by handleEeprom like a web UI change.
+    void setEnterRssi(uint8_t rssi);
+    void setExitRssi(uint8_t rssi);
+    void setRfGain(uint8_t gain);
+#endif
 
    private:
     laptimer_config_t conf;

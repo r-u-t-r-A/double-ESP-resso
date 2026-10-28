@@ -326,6 +326,26 @@ uint8_t Config::getRfGain() {
     return conf.rfGain;
 }
 
+#ifdef C5VRX_LINK
+void Config::setEnterRssi(uint8_t rssi) {
+    if (conf.enterRssi == rssi) return;
+    conf.enterRssi = rssi;
+    modified = true;
+}
+
+void Config::setExitRssi(uint8_t rssi) {
+    if (conf.exitRssi == rssi) return;
+    conf.exitRssi = rssi;
+    modified = true;
+}
+
+void Config::setRfGain(uint8_t gain) {
+    if (conf.rfGain == gain) return;
+    conf.rfGain = gain;
+    modified = true;
+}
+#endif
+
 bool Config::getLedEnabled() {
     return conf.ledEnabled != 0;
 }

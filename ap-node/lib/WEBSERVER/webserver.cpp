@@ -145,6 +145,69 @@ void Webserver::setRaceControl(RaceControl *r) {
     race = r;
     race->setNotifier(sendRaceEvent);
 }
+
+bool Webserver::takeCalibStart(uint8_t *startGain, uint8_t *laps) {
+    if (!calStartReq) return false;
+    *startGain = calStartGain;
+    *laps = calLaps;
+    calStartReq = false;
+    return true;
+}
+
+bool Webserver::takeCalibStop() {
+    if (!calStopReq) return false;
+    calStopReq = false;
+    return true;
+}
+
+// POST /calib/start, optional JSON body {"startGain":45,"laps":3}.
+void Webserver::requestCalibStart(AsyncWebServerRequest *request, JsonVariant *json) {
+    if (!cal || timer->isRunning() || (race && !race->isIdle())) {
+        request->send(409, "application/json", "{\"status\": \"busy\"}");
+        return;
+    }
+    uint8_t startGain = CAL_START_GAIN_DEFAULT;
+    uint8_t laps = CAL_LAPS_DEFAULT;
+    if (json && (*json)["startGain"].is<int>()) startGain = constrain((*json)["startGain"].as<int>(), CAL_MIN_GAIN, CAL_MAX_GAIN);
+    if (json && (*json)["laps"].is<int>()) laps = constrain((*json)["laps"].as<int>(), 1, CAL_LAPS_MAX);
+    calStartGain = startGain;
+    calLaps = laps;
+    calStopReq = false;
+    calStartReq = true;
+    // Events after this seq belong to the new run.
+    char buf[48];
+    snprintf(buf, sizeof(buf), "{\"status\": \"OK\", \"seq\": %lu}", (unsigned long)cal->event_seq);
+    request->send(200, "application/json", buf);
+    led->on(200);
+}
+
+// GET /calib. Read without a lock while loop() writes it: a torn read only
+// shows a stale field for one poll.
+void Webserver::sendCalibStatus(AsyncWebServerRequest *request) {
+    if (!cal) {
+        request->send(404, "application/json", "{\"status\": \"no calibrator\"}");
+        return;
+    }
+    char buf[768];
+    uint32_t seq = cal->event_seq;
+    const char *state = calStartReq ? "starting" : cal_state_name(cal->state);
+    int n = snprintf(buf, sizeof(buf),
+                     "{\"state\":\"%s\",\"event\":\"%s\",\"seq\":%lu,\"gain\":%u,\"lastPeak\":%u,\"lastClip\":%u,"
+                     "\"clean\":%u,\"lapsSeen\":%u,\"lapsWanted\":%u,\"enter\":%u,\"exit\":%u,\"sepDb\":%.1f,\"events\":[",
+                     state, cal_event_name(cal->event), (unsigned long)seq, cal->gain, cal->last_peak, cal->last_clip,
+                     cal->clean_in_row, cal->laps_seen, cal->laps_wanted, cal->enter, cal->exit,
+                     cal->separation / CAL_RSSI_PER_DB);
+    // The last few events as [seq,"name",arg], so a poll that missed one can still speak it.
+    uint32_t first = seq >= CAL_EVENT_LOG ? seq - CAL_EVENT_LOG + 1 : 1;
+    for (uint32_t s = first; s <= seq && n > 0 && n < (int)sizeof(buf); ++s) {
+        uint8_t arg;
+        cal_event_t e = cal_event_at(cal, s, &arg);
+        n += snprintf(buf + n, sizeof(buf) - n, "%s[%lu,\"%s\",%u]", s == first ? "" : ",", (unsigned long)s,
+                      cal_event_name(e), arg);
+    }
+    if (n > 0 && n < (int)sizeof(buf)) snprintf(buf + n, sizeof(buf) - n, "]}");
+    request->send(200, "application/json", buf);
+}
 #endif
 
 void Webserver::handleWebUpdate(uint32_t currentTimeMs) {
@@ -424,6 +487,12 @@ Battery Voltage:\t%0.1fv";
     });
 
     server.on("/timer/start", HTTP_POST, [this](AsyncWebServerRequest *request) {
+#ifdef C5VRX_LINK
+        if (calibrating()) {
+            request->send(409, "application/json", "{\"status\": \"calibrating\"}");
+            return;
+        }
+#endif
         timer->start();
         request->send(200, "application/json", "{\"status\": \"OK\"}");
     });
@@ -440,8 +509,31 @@ Battery Voltage:\t%0.1fv";
 #ifdef C5VRX_LINK
     // Firmware start sequence, shared with the ELRS radio button.
     server.on("/timer/begin", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (calibrating()) {
+            request->send(409, "application/json", "{\"status\": \"calibrating\"}");
+            return;
+        }
         if (race) race->requestBegin();
         request->send(200, "application/json", "{\"status\": \"OK\"}");
+    });
+
+    // Auto-calibration (docs/protocol.md). The JSON handler must come first:
+    // the plain POST handler below would also match a request with a body.
+    AsyncCallbackJsonWebHandler *calibJsonHandler = new AsyncCallbackJsonWebHandler("/calib/start", [this](AsyncWebServerRequest *request, JsonVariant &json) {
+        requestCalibStart(request, &json);
+    });
+    calibJsonHandler->setMethod(HTTP_POST);
+    server.addHandler(calibJsonHandler);
+    server.on("/calib/start", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        requestCalibStart(request, nullptr);
+    });
+    server.on("/calib/stop", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        calStartReq = false;
+        calStopReq = true;
+        request->send(200, "application/json", "{\"status\": \"OK\"}");
+    });
+    server.on("/calib", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        sendCalibStatus(request);
     });
 #endif
 

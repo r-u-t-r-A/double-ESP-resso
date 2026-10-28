@@ -7,6 +7,7 @@
 #include "ledstrip.h"
 #endif
 #ifdef C5VRX_LINK
+#include "calibration.h"
 #include "racecontrol.h"
 #endif
 #ifdef ELRS_BACKPACK
@@ -37,6 +38,11 @@ class Webserver {
 #endif
 #ifdef C5VRX_LINK
     void setRaceControl(RaceControl *r);
+    void setCalibrator(cal_t *c) { cal = c; }
+    // /calib/start and /calib/stop only set these requests; loop() takes
+    // them and runs cal_start / cal_abort on the task that calls cal_push.
+    bool takeCalibStart(uint8_t *startGain, uint8_t *laps);
+    bool takeCalibStop();
 #endif
 #ifdef ELRS_BACKPACK
     void setElrsBackpack(ElrsBackpack *b) { elrs = b; }
@@ -51,6 +57,9 @@ class Webserver {
     void sendLaptimeEvent(uint32_t lapTime);
 #ifdef C5VRX_LINK
     void handleRssiStream(uint32_t currentTimeMs);
+    void requestCalibStart(AsyncWebServerRequest *request, JsonVariant *json);
+    void sendCalibStatus(AsyncWebServerRequest *request);
+    bool calibrating() { return cal && cal_active(cal); }
 #endif
 
     Config *conf;
@@ -66,6 +75,11 @@ class Webserver {
 #endif
 #ifdef C5VRX_LINK
     RaceControl *race = nullptr;
+    cal_t *cal = nullptr;
+    volatile bool calStartReq = false;
+    volatile bool calStopReq = false;
+    volatile uint8_t calStartGain = CAL_START_GAIN_DEFAULT;
+    volatile uint8_t calLaps = CAL_LAPS_DEFAULT;
 #endif
 #ifdef ELRS_BACKPACK
     ElrsBackpack *elrs = nullptr;
