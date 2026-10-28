@@ -37,7 +37,7 @@ we build on ESP-IDF 6.0.2, whose PHY library may differ.
   - `check=flat`: the PHY isn't receiving. Stop here.
   - `timeouts` or `short` climbing: the direct trigger doesn't match this
     IDF's engine. Every capture then falls back to the slow stock path.
-- [ ] Type `s` and check the reply `STATUS,<mhz>,<gain>,OK,2`.
+- [ ] Type `s` and check the reply `STATUS,<mhz>,<gain>,OK,3`.
 - [ ] **Spectrum orientation:** with a VTX on R1 and `f 5658`, `m` prints
   `MIRROR,5658,<pilot_db>,<mirror_db>`. The pilot should be 15–35 dB above
   the mirror. If the mirror is the higher one, flip `BP_SPECTRUM_SIGN` in
@@ -114,7 +114,12 @@ See [RADIO_START.md](RADIO_START.md) for the radio and backpack setup.
 - [ ] Pull the card while logging: *SD card* shows `ERROR: no card detected` and *SD logging* `waiting for a card`. Put it back: a new numbered file starts. Pulling it while logging is off is noticed within about 5 s too.
 - [ ] Desense: compare the RF node's noise floor and a gate pass with logging on and off.
 
-## 7. Field
+## 7. Auto-calibration
+
+- [ ] Flash both nodes (RF firmware 3 sends the clip field). Pass close to the antenna at a high gain: the Calibration tab's status line shows a non-zero clip.
+- [ ] Run Auto calibrate on a whoop track; record the locked gain, separation and lap accuracy with the date.
+
+## 8. Field
 
 - [ ] Tune the enter/exit thresholds and minimum lap time.
 - [ ] Compare lap times against video frame timing. The target is ±100 ms.

@@ -56,6 +56,41 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
 - **RSSI scaling:** band power in dB re 1 LSB², filtered, with -6..54 dB mapped to
   0-255 (4.25 counts/dB). The floor is about -2 dB, so about 18 counts. It is not
   calibrated dBm.
+- **Auto-calibration** (2026-10-28, `ap-node/lib/CALIBRATION/calibration.h`, plain C,
+  tested by `tests/test_calibration.c`). The web UI's *Auto calibrate* speaks prompts while the
+  pilot flies real laps.
+  - Why gain: RSSI 255 is the 10-bit I/Q ADC rail, so a close pass at high gain clips, and no
+    RSSI width or scale fixes that. Raising gain lifts the floor and the peak equally, so the
+    target is the highest gain whose gate peak doesn't clip and keeps headroom.
+  - Why not fixed distances (RotorHazard's 2 m / 7 m): on a small whoop track the quad is within
+    a few metres of the timer everywhere, so it uses real gate passes.
+  - RF firmware 3 adds the capture's clip per mille to `R` lines (`R,<seq>,<rssi>,<clip>`). The
+    AP still parses the old 3-field line, with clip 0, so only `CAL_PEAK_MAX` catches clipping
+    with an old RF node.
+  - Phase A: start at gain 45, open a pass window (500 ms baseline median, then a rise of 20
+    counts), judge each pass after a 300 ms tail. Clipped (> 5 per mille) or peak > 230 steps the
+    gain down by 4 and waits for the RF node's `S` to confirm the gain plus 400 ms to settle.
+    Two clean passes in a row lock it. The dB per step is unknown, so the search is empirical.
+  - Phase B: record the Kalman-filtered RSSI (the value `LapTimer` compares) as 10 ms maxima
+    while the pilot flies N laps, counted live with provisional thresholds from phase A. Enter
+    is the centre of the widest band of Enter values that gives the same count through
+    `LapTimer`'s peak logic and minimum lap; Exit is the centre of the matching Exit band. Our
+    own method, not RotorHazard's (MIT NON-AI).
+  - Integration (`#ifdef C5VRX_LINK`): `loop()` calls `cal_push` per sample and runs
+    `cal_start` / `cal_abort` on request flags from `/calib/start` and `/calib/stop`, so the
+    18 KB struct is only written on the loop task. `parallelTask` sends `cal.gain` while it
+    runs. On success the gain, Enter and Exit go through `Config` setters once, and
+    `handleEeprom` saves them. Races can't start while calibrating, and vice versa.
+  - `GET /calib` returns the last 8 events with sequence numbers, because a 250 ms poll can
+    miss events emitted together (pass_clean, gain_locked, fly_laps).
+  - Unproven: every tunable in `calibration.h` is untested on hardware, especially
+    `CAL_PEAK_MAX`, `CAL_GAIN_STEP` and `CAL_MIN_RISE`. A between-pass bump more than
+    `CAL_MIN_RISE` above the floor can be taken for a gate pass in phase A. That lowers the
+    provisional thresholds, so phase B then counts bumps as laps, and the result fits that
+    count. Also unproven: how long a gain change takes to settle. The final threshold search
+    runs on the loop task, about 0.4 ms on a desktop for a 3-lap trace and 3 ms for a full
+    180 s one. Scaled to the C5 that is maybe 20-40 ms and 0.2 s; the second outlasts the 2 KB
+    UART buffer (about 120 samples), so a few link samples may drop once, after recording.
 
 ## Gate LEDs
 
@@ -114,7 +149,7 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
   Times are only possible for this boot's file, because `millis()` restarts at boot.
 - Unproven: SD library behaviour on the C5 (Arduino 3.3.8), write stalls versus the ring,
   export speed over the AP, SPI noise near the RF node, and free heap with the ring (static
-  RAM is 84 KB).
+  RAM is 84 KB, 101 KB with the auto-calibration trace).
 
 ## ELRS radio start
 

@@ -32,6 +32,10 @@ Voice needs two things:
 4. Click **Enable voice**.
 5. Click **Test voice**. You should hear "testing sound for pilot …, 1, 2, 3".
 
+*Auto calibrate* on the Calibration tab turns voice on by itself and speaks
+its prompts ("Fly through the gate now", "Lap 1", …) whatever the announcer
+type is.
+
 The **Enable voice** setting is not saved. Click it again after every page
 reload, or no announcements are spoken. Until you click it, the start tone is
 the only sound (from the buzzer or the browser, see above).

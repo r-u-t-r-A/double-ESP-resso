@@ -138,10 +138,21 @@ cc -std=c99 -Wall -Wextra -Werror -I ap-node/lib/SDLOG tests/test_sdlog_row.c -o
 2. **Configuration tab:** pick the band and channel (for example R1, R3, R6 or
    R7) and press *Save Configuration*. The *RF node* line should show
    `OK <MHz> MHz …` within a second.
-3. **Calibration tab:** watch the live RSSI while you fly or carry the quad
-   through the gate.
-   - If the peak flat-lines at 255, lower the *RF node gain*.
-   - Set *Enter* just below the gate-pass peak and *Exit* well above the
+3. **Calibration tab:** press *Auto calibrate* and take off. The timer turns
+   voice on and talks you through it while you fly normal laps:
+   - "Fly through the gate now": fly through once. If the pass clipped the
+     receiver ("Too strong"), the timer lowers the gain and asks again, until
+     two passes in a row are clean.
+   - "Now fly 3 laps": fly your normal line; each counted lap is called out.
+   - At the end it says the separation in dB and the Enter and Exit values,
+     and saves them with the gain. The sliders and the chart lines move to
+     the new values.
+   - Aim the antenna across the gate opening, away from the rest of the
+     track. If the timer says the gate can't be told apart from the track,
+     re-aim it and try again.
+   - *Stop* cancels; the previous gain and thresholds stay. You can still set
+     them by hand: if the peak flat-lines at 255, lower the *RF node gain*,
+     set *Enter* just below the gate-pass peak and *Exit* well above the
      far-away level, then save.
 4. **Race tab:** press *Start Race*.
 
