@@ -231,18 +231,34 @@
         <div class="sdlog-only" style="display: none">
           <button id="exportLogButton" onclick="exportRssiLog(15)">Export last 15 min of RSSI log</button>
         </div>
+        <div class="rfnode-only" style="display: none">
+          <div class="config-item">
+            <label for="calStartGain">Auto calibrate start gain:</label>
+            <input type="number" min="5" max="89" step="1" id="calStartGain" value="45" />
+          </div>
+          <div class="config-item">
+            <label for="calLaps">Laps to fly:</label>
+            <input type="number" min="1" max="20" step="1" id="calLaps" value="3" />
+          </div>
+          <button id="calStartButton" onclick="startCalibration()">Auto calibrate</button>
+          <button id="calStopButton" onclick="stopCalibration()" disabled>Stop</button>
+          <div class="config-item">
+            <label>Calibration:</label>
+            <span class="val" id="calStatus">-</span>
+          </div>
+        </div>
         <div class="config-item">
           <label for="enter">Enter RSSI:</label>
           <div class="input-with-value">
             <span id="enterSpan" class="val">120</span>
-            <input type="range" min="50" max="255" step="1" id="enter" value="120" oninput="updateEnterRssi(this,value)" />
+            <input type="range" min="0" max="255" step="1" id="enter" value="120" oninput="updateEnterRssi(this,value)" />
           </div>
         </div>
         <div class="config-item">
           <label for="exit">Exit RSSI:</label>
           <div class="input-with-value">
             <span id="exitSpan" class="val">100</span>
-            <input type="range" min="50" max="255" step="1" id="exit" value="100" oninput="updateExitRssi(this,value)" />
+            <input type="range" min="0" max="255" step="1" id="exit" value="100" oninput="updateExitRssi(this,value)" />
           </div>
         </div>
         <div class="config-item rfnode-only" style="display: none">
