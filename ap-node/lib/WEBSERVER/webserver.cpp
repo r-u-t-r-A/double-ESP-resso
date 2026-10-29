@@ -221,6 +221,11 @@ void Webserver::handleWebUpdate(uint32_t currentTimeMs) {
     }
 #ifdef C5VRX_LINK
     handleRssiStream(currentTimeMs);
+    // Tell open pages when a calibration starts, from anywhere (the radio
+    // button too), so they follow it and speak its prompts.
+    bool calNow = calibrating();
+    if (calNow && !calWasActive) events.send("1", "calibStart");
+    calWasActive = calNow;
 #endif
 
     wl_status_t status = WiFi.status();

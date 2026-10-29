@@ -20,14 +20,35 @@ static RaceControl race;
 // and the web task just read it.
 static cal_t cal;
 static bool calSaved = false;
+// A radio-started calibration uses the start gain and laps last used from the web UI.
+static uint8_t calStartGain = CAL_START_GAIN_DEFAULT;
+static uint8_t calLaps = CAL_LAPS_DEFAULT;
+// Radio button requests from parallelTask, carried out on the loop task like the web ones.
+static volatile bool radioCalStart = false;
+static volatile bool radioCalStop = false;
 
 // Start/stop requests come from the web task but run here, on the loop task,
 // so cal_start never races cal_push.
 static void handleCalibration() {
+    bool stop = ws.takeCalibStop();
+    if (radioCalStop) {
+        radioCalStop = false;
+        stop = true;
+    }
+    if (stop) cal_abort(&cal);
     uint8_t startGain, laps;
-    if (ws.takeCalibStop()) cal_abort(&cal);
-    if (ws.takeCalibStart(&startGain, &laps) && race.isIdle()) {
-        cal_start(&cal, millis(), startGain, laps, config.getMinLapMs());
+    bool start = false;
+    if (ws.takeCalibStart(&startGain, &laps)) {
+        calStartGain = startGain;
+        calLaps = laps;
+        start = true;
+    }
+    if (radioCalStart) {
+        radioCalStart = false;
+        start = true;
+    }
+    if (start && race.isIdle()) {
+        cal_start(&cal, millis(), calStartGain, calLaps, config.getMinLapMs());
         calSaved = false;
     }
     if (cal.state == CAL_DONE && !calSaved) {
@@ -43,13 +64,21 @@ static void handleCalibration() {
 #ifdef ELRS_BACKPACK
 static ElrsBackpack elrs;
 
-// Short press starts the countdown, long press stops or cancels it.
+// Short press starts the countdown, or auto-calibration if the Config tab says
+// so. Long press stops or cancels either.
 static void handleRadioButton(uint32_t currentTimeMs) {
     elrs_press_e press = elrs.handle(currentTimeMs, config.getElrsEnabled(), config.getElrsMac());
     elrs.debugStats(currentTimeMs);
     if (press == ELRS_PRESS_SHORT && race.isIdle() && !cal_active(&cal)) {
         buzzer.beep(60);
-        race.requestBegin();
+        if (config.getElrsAction() == ELRS_ACTION_CALIBRATE) {
+            radioCalStart = true;
+        } else {
+            race.requestBegin();
+        }
+    } else if (press == ELRS_PRESS_LONG && cal_active(&cal)) {
+        buzzer.beep(60);
+        radioCalStop = true;
     } else if (press == ELRS_PRESS_LONG && !race.isIdle()) {
         buzzer.beep(60);
         race.requestStop();

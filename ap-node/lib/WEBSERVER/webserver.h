@@ -101,5 +101,6 @@ class Webserver {
     uint32_t rssiStreamMs = 0;
     bool rssiStreamClients = false;
     bool raceWasRunning = false;
+    bool calWasActive = false;
 #endif
 };

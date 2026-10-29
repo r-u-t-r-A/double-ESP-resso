@@ -34,7 +34,8 @@ void Config::load(void) {
     }
 
     // v2 -> v3 appended the ELRS fields, v3 -> v4 the LED chip and order,
-    // v4 -> v5 the start tone source, v5 -> v6 SD logging.
+    // v4 -> v5 the start tone source, v5 -> v6 SD logging, v6 -> v7 the
+    // radio button action.
     if (version == 2U) {
         memset(conf.elrsMac, 0, sizeof(conf.elrsMac));
         conf.elrsEnabled = 0;
@@ -55,6 +56,11 @@ void Config::load(void) {
     if (version == 5U) {
         conf.sdLog = 0;
         version = 6U;
+        modified = true;
+    }
+    if (version == 6U) {
+        conf.elrsAction = ELRS_ACTION_RACE;
+        version = 7U;
         modified = true;
     }
     if (version == CONFIG_VERSION) conf.version = CONFIG_VERSION | CONFIG_MAGIC;
@@ -113,6 +119,7 @@ void Config::toJson(AsyncResponseStream& destination) {
     formatElrsMac(mac);
     config["elrsOn"] = conf.elrsEnabled;
     config["elrsUid"] = mac;
+    config["elrsAction"] = conf.elrsAction;
 #endif
     serializeJson(config, destination);
 }
@@ -144,6 +151,7 @@ void Config::toJsonString(char* buf) {
     formatElrsMac(mac);
     config["elrsOn"] = conf.elrsEnabled;
     config["elrsUid"] = mac;
+    config["elrsAction"] = conf.elrsAction;
 #endif
     serializeJsonPretty(config, buf, CONFIG_JSON_SIZE);
 }
@@ -259,6 +267,13 @@ void Config::fromJson(JsonObject source) {
             modified = true;
         }
     }
+    if (source["elrsAction"].is<int>()) {
+        int a = source["elrsAction"];
+        if ((a == ELRS_ACTION_RACE || a == ELRS_ACTION_CALIBRATE) && a != conf.elrsAction) {
+            conf.elrsAction = a;
+            modified = true;
+        }
+    }
     // The phrase itself is never stored, only the MAC derived from it.
     const char* phrase = source["elrsPhrase"] | "";
     if (phrase[0] != 0) {
@@ -296,6 +311,10 @@ bool Config::getSdLog() {
 
 bool Config::getElrsEnabled() {
     return conf.elrsEnabled != 0;
+}
+
+uint8_t Config::getElrsAction() {
+    return conf.elrsAction;
 }
 
 const uint8_t* Config::getElrsMac() {

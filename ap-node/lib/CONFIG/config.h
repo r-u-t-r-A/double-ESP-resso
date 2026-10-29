@@ -105,13 +105,16 @@
 #define CONFIG_JSON_SIZE 640
 #define CONFIG_MAGIC_MASK (0b11U << 30)
 #define CONFIG_MAGIC (0b01U << 30)
-#define CONFIG_VERSION 6U
+#define CONFIG_VERSION 7U
 #define ELRS_MAC_LEN 6
 
 // Who plays the race start tone (C5VRX_LINK builds). The browser's Web Audio
 // tone arrives later than the AP node's buzzer, so play only one of them.
 #define START_TONE_BUZZER 0
 #define START_TONE_BROWSER 1
+// What a short press of the ELRS radio button starts (ELRS_BACKPACK builds).
+#define ELRS_ACTION_RACE 0       // the race countdown
+#define ELRS_ACTION_CALIBRATE 1  // auto-calibration
 // RotorHazard's tone lengths: each staging tone, and the start tone.
 #define STAGE_TONE_MS 100
 #define START_TONE_MS 700
@@ -144,6 +147,8 @@ typedef struct {
     uint8_t startTone;
     // v6: log 1 kHz RSSI to the SD card (PIN_SD_CS builds).
     uint8_t sdLog;
+    // v7: ELRS_ACTION_RACE or ELRS_ACTION_CALIBRATE (ELRS_BACKPACK builds).
+    uint8_t elrsAction;
 } laptimer_config_t;
 
 class Config {
@@ -172,6 +177,7 @@ class Config {
     uint8_t getStartTone();
     bool getSdLog();
     bool getElrsEnabled();
+    uint8_t getElrsAction();
     const uint8_t* getElrsMac();
     char* getSsid();
     char* getPassword();
