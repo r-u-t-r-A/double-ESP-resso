@@ -91,6 +91,13 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
     runs on the loop task, about 0.4 ms on a desktop for a 3-lap trace and 3 ms for a full
     180 s one. Scaled to the C5 that is maybe 20-40 ms and 0.2 s; the second outlasts the 2 KB
     UART buffer (about 120 samples), so a few link samples may drop once, after recording.
+- **RF node firmware is updated over USB only** (decided 2026-10-29). Flashing it from the AP
+  through the ROM loader would need crossed D6/D7 wires (UART0; a straight pin-to-pin join
+  garbled the link before) and a way into download mode: either the undocumented
+  `LP_AON_FORCE_DOWNLOAD_BOOT` register ("internal debugging only") or EN/BOOT wires on the
+  button pads. The AP has no free GPIOs for those wires (only D3, a strapping pin). App-level
+  OTA over the D1/D5 link would need a two-slot partition table and update code on both
+  nodes. Not worth it for now.
 
 ## Gate LEDs
 
