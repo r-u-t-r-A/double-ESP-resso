@@ -19,10 +19,14 @@ void SdLog::init(uint8_t sck, uint8_t miso, uint8_t mosi, uint8_t cs) {
     pinMiso = miso;
     pinMosi = mosi;
     pinCs = cs;
-    // Same priority as the lap timer loop: SD writes block on SPI transfers
-    // and card stalls, which the ring absorbs, while the loop keeps running.
-    // FatFs keeps long file names on the stack.
-    xTaskCreate(taskEntry, "sdlog", 6144, this, 1, NULL);
+    // Priority 0, below the lap timer loop and level with parallelTask. SD
+    // writes block on SPI transfers and card stalls, which the ring absorbs.
+    // With no card, or no SD module (MISO floats), the Arduino SD driver
+    // busy-waits up to 500 ms per call in sdWait() on every mount retry; at
+    // priority 1 that starved parallelTask and froze the gate LEDs. At equal
+    // priority FreeRTOS time-slices them every tick. FatFs keeps long file
+    // names on the stack.
+    xTaskCreate(taskEntry, "sdlog", 6144, this, 0, NULL);
 }
 
 void SdLog::setClock(int64_t epochMs, int32_t tzOffsetMin) {

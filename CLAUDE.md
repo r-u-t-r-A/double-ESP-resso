@@ -147,7 +147,7 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
   CS D4 (not the XIAO's SS on D3, a strapping pin). Config v6 `sdLog` switches it on.
 - `loop()` pushes every 1 kHz sample (raw, filtered, race start/stop/lap events) into a
   lock-free 2048-sample ring (`sdlog_row.h`, plain C, tested by `tests/test_sdlog_row.c`). A
-  writer task (priority 1) writes fixed-width 29-byte rows, one file per session
+  writer task (priority 0, level with `parallelTask`) writes fixed-width 29-byte rows, one file per session
   (`/rssi_NNNN[_date].csv`), and flushes every 1 s. Card stalls only fill the ring.
 - The writer task mounts the card at boot whether or not logging is on, retries every 5 s, and
   checks an idle card with `SD.readRAW()` every 5 s. When `SD.begin()` fails, `sdcard_init()` +
