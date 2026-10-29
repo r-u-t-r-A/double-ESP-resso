@@ -34,7 +34,8 @@ Voice needs two things:
 
 *Auto calibrate* on the Calibration tab turns voice on by itself and speaks
 its prompts ("Fly through the gate now", "Lap 1", …) whatever the announcer
-type is.
+type is. A calibration started from the radio button is spoken too, but only
+on a page where voice is already enabled.
 
 The **Enable voice** setting is not saved. Click it again after every page
 reload, or no announcements are spoken. Until you click it, the start tone is

@@ -100,6 +100,7 @@ See [RADIO_START.md](RADIO_START.md) for the radio and backpack setup.
 - [ ] Phones and laptops still join the AP, and the web UI works, while ESP-NOW is listening on channel 1.
 - [ ] A short press on the radio button starts the countdown, and a 1 s hold stops it, at gate distance and at the far end of the track.
 - [ ] Count missed presses over 20 presses at the pilot's position.
+- [ ] Set *Radio button starts* to *Auto calibration* and save. With voice enabled on an open page, a short press starts calibration ("Calibration. Take off…") and a 1 s hold stops it ("Calibration stopped"). *Start Race* from the radio is ignored in this mode; set it back to *Race* afterwards.
 - [ ] Repeat the RF node noise-floor check from §3 with ESP-NOW listening.
 
 ## 6. SD card logging (AP node)

@@ -32,6 +32,7 @@ var ledStrip = false;
 const elrsOnInput = document.getElementById("elrsOn");
 const elrsPhraseInput = document.getElementById("elrsPhrase");
 const elrsUidDisplay = document.getElementById("elrsUid");
+const elrsActionSelect = document.getElementById("elrsAction");
 var elrsBackpack = false;
 // Firmware runs the start countdown (/timer/begin + raceArm/raceStart/raceStop events).
 var raceCtl = false;
@@ -84,6 +85,7 @@ const calStatusDisplay = document.getElementById("calStatus");
 var calActive = false;
 var calPolling = false;
 var calSeq = 0; // last calibration event spoken
+var calStarting = false; // this page's /calib/start is in flight
 
 const batteryVoltageDisplay = document.getElementById("bvolt");
 
@@ -388,6 +390,7 @@ function saveConfig() {
       ...(elrsBackpack
         ? {
             elrsOn: elrsOnInput.checked ? 1 : 0,
+            elrsAction: parseInt(elrsActionSelect.value) || 0,
             ...(elrsPhraseInput.value !== "" ? { elrsPhrase: elrsPhraseInput.value } : {}),
           }
         : {}),
@@ -409,6 +412,7 @@ function saveConfig() {
 function showElrsConfig(config) {
   elrsOnInput.checked = !!config.elrsOn;
   elrsUidDisplay.textContent = config.elrsUid || "not set";
+  elrsActionSelect.value = config.elrsAction ?? 0;
 }
 
 function populateFreqOutput() {
@@ -794,6 +798,11 @@ if (!!window.EventSource) {
     stopRaceButton.disabled = false;
   });
 
+  // Calibration started from the radio button or another page.
+  source.addEventListener("calibStart", function (e) {
+    if (rfNode) resumeCalibration(true);
+  });
+
   source.addEventListener("raceStop", function (e) {
     queueSpeak("<p>Race stopped</p>");
     clearInterval(timerInterval);
@@ -913,6 +922,7 @@ async function startCalibration() {
   // Not awaited: the voice loop runs until voice is disabled.
   if (!audioEnabled) enableAudioLoop();
   calStartButton.disabled = true;
+  calStarting = true;
   try {
     const response = await fetch("/calib/start", {
       method: "POST",
@@ -933,6 +943,8 @@ async function startCalibration() {
   } catch (e) {
     calStatusDisplay.textContent = "start failed";
     setCalActive(false);
+  } finally {
+    calStarting = false;
   }
 }
 
@@ -940,13 +952,20 @@ function stopCalibration() {
   fetch("/calib/stop", { method: "POST" }).catch(() => {});
 }
 
-// A calibration started from another page or before a reload: follow it quietly.
-function resumeCalibration() {
+// A calibration started before a reload or elsewhere: follow it. On page
+// load (fromStart false) old prompts are skipped; for one that just started
+// (the radio button, another page) prompts are spoken from "started" on.
+function resumeCalibration(fromStart = false) {
+  if (calPolling || calStarting) return; // this page started it and follows it already
   fetch("/calib")
     .then((response) => (response.ok ? response.json() : null))
     .then((s) => {
-      if (!s) return;
+      if (!s || calPolling || calStarting) return;
       calSeq = s.seq;
+      if (fromStart) {
+        const started = (s.events || []).filter((ev) => ev[1] === "started").pop();
+        if (started) calSeq = started[0] - 1;
+      }
       showCalibStatus(s);
       if (!["idle", "done", "failed"].includes(s.state)) pollCalibration();
     })

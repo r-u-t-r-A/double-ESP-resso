@@ -118,7 +118,11 @@ drives it and speaks its events.
 | `GET /calib` | Current state, polled every 250 ms by the web UI. |
 
 While calibration runs, `/timer/start` and `/timer/begin` reply 409
-`{"status":"calibrating"}`, and the ELRS radio start is ignored. On success the
+`{"status":"calibrating"}`, and a short press on the ELRS radio button is
+ignored (a long press stops calibration). With the Config tab's *Radio button
+starts: Auto calibration*, a short press starts calibration like
+`POST /calib/start`, and `/events` sends `calibStart` (data `1`) whenever a
+calibration starts, so open pages follow it. On success the
 AP node saves `rfGain`, `enterRssi` and `exitRssi` to its config itself.
 
 Example `GET /calib`:

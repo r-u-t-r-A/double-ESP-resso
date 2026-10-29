@@ -8,6 +8,10 @@ You can start a race with a button on your radio, so you don't have to press
   after the last one (RotorHazard's default staging).
 - **Long press** (hold for 1 s): stops the race, or cancels the countdown.
 
+Set **Radio button starts** on the Config tab to **Auto calibration** to use
+the same button for calibration instead (see [Calibrate from the
+radio](#calibrate-from-the-radio)).
+
 The AP node buzzer chirps when it recognises a press.
 
 No extra receiver is needed. The ExpressLRS TX module's built-in **TX
@@ -87,6 +91,25 @@ won't start. Fix it by choosing ▲ or inverting the mix in step 2.
 
 The web UI's *Start Race* button uses exactly the same countdown on the timer,
 so the button and the radio behave the same way.
+
+## Calibrate from the radio
+
+With **Radio button starts: Auto calibration** on the Config tab (and *Save
+Configuration*), the button runs auto-calibration instead of a race:
+
+- **Short press:** the AP buzzer chirps and calibration starts, the same as
+  *Auto calibrate* on the Calibration tab. It uses the start gain and lap
+  count last used from the web UI since the timer was powered on (45 and 3
+  until then).
+- **Long press:** stops the calibration. The previous gain and thresholds stay.
+
+The voice prompts ("Fly through the gate now", "Lap 1", …) come from the
+browser, so keep the web UI open on a phone or laptop with **voice enabled**
+(see [VOICE.md](VOICE.md)). An open page notices a calibration started from the
+radio and follows it; without one, calibration still runs, but silently.
+
+Set it back to **Race** for racing: while it is on *Auto calibration*, the
+radio button can't start a race.
 
 ## Troubleshooting
 

@@ -172,6 +172,12 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
   `MSP_ELRS_BACKPACK_SET_RECORDING_STATE` (0x0305), which the radio's "DVR Rec" AUX switch sends.
   - Each edge is sent once, with no repeats.
   - A short press (under 1 s) begins the countdown; holding for 1 s stops or cancels it.
+  - Config v7 `elrsAction` (Config tab *Radio button starts*): `ELRS_ACTION_CALIBRATE` makes
+    the short press start auto-calibration instead, with the start gain and laps last used
+    from the web UI (defaults 45 / 3 after boot); a long press stops it. The press only sets a
+    flag; `loop()` runs `cal_start`, as for `/calib/start`. Voice comes from the browser, so
+    `handleWebUpdate` sends a `calibStart` SSE event whenever calibration starts, and an open
+    page follows it and speaks from the "started" event on.
 - The backpack sends to the bind-phrase UID (`md5('-DMY_BINDING_PHRASE="…"')[0:6]`, bit 0
   cleared) on channel 1. The AP node runs `WIFI_AP_STA` with the SoftAP on channel 1, and
   sets the STA MAC to that UID.
