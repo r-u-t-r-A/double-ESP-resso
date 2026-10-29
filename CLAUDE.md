@@ -149,8 +149,14 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
   lock-free 2048-sample ring (`sdlog_row.h`, plain C, tested by `tests/test_sdlog_row.c`). A
   writer task (priority 0, level with `parallelTask`) writes fixed-width 29-byte rows, one file per session
   (`/rssi_NNNN[_date].csv`), and flushes every 1 s. Card stalls only fill the ring.
-- The writer task mounts the card at boot whether or not logging is on, retries every 5 s, and
-  checks an idle card with `SD.readRAW()` every 5 s. When `SD.begin()` fails, `sdcard_init()` +
+- The writer task mounts the card once at boot whether or not logging is on, and after that
+  only on the Config tab's *Mount SD card* (`POST /sdlog/mount`). *Unmount SD card*
+  (`/sdlog/unmount`) closes the log file and unmounts, so the card can be swapped without a
+  reboot; it waits for any export download to finish (a lease taken in `openExport`, released by
+  `closeExport` or the `Cursor` destructor when a download is dropped). A mounted idle card is
+  checked with `SD.readRAW()` every 5 s. Nothing retries a missing card: with no card, or no SD
+  module (MISO floats), the Arduino SD driver's `sdWait()` busy-waits up to 500 ms per call,
+  which at priority 1 froze the gate LEDs (2026-10-29). When `SD.begin()` fails, `sdcard_init()` +
   `disk_initialize()` tell "no card" from "card without FAT". `/status` lines `SD Card:` and
   `SD Logging:` feed the Config tab fields.
 - Fixed-width rows let `/sdlog/export?min=15` binary-search the window by `ms`. It streams a

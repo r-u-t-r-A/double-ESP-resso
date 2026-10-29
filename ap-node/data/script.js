@@ -8,6 +8,8 @@ const startToneSelect = document.getElementById("startTone");
 const sdLogInput = document.getElementById("sdLog");
 const sdStatusDisplay = document.getElementById("sdstatus");
 const sdCardDisplay = document.getElementById("sdcard");
+const sdMountButton = document.getElementById("sdMountButton");
+const sdUnmountButton = document.getElementById("sdUnmountButton");
 const exportLogButton = document.getElementById("exportLogButton");
 const enterRssiInput = document.getElementById("enter");
 const exitRssiInput = document.getElementById("exit");
@@ -177,6 +179,7 @@ function getBatteryVoltage() {
       if (rfNode && rfMatch) rfStatusDisplay.innerText = rfMatch[1];
       const sdCardMatch = response.match(/SD Card:\s*([^\n]*)/);
       if (sdLog && sdCardMatch) {
+        showSdButtons(sdCardMatch[1]);
         sdCardDisplay.innerText = sdCardMatch[1];
         sdCardDisplay.style.color = sdCardMatch[1].startsWith("OK")
           ? "#2e9e3e"
@@ -190,6 +193,28 @@ function getBatteryVoltage() {
 }
 
 setInterval(getBatteryVoltage, 2000);
+
+// Mount is offered while no card is mounted, Unmount while one is. Both wait
+// while the AP node is busy ("mounting..." / "unmounting...").
+function showSdButtons(card) {
+  const busy = card.endsWith("...");
+  const mounted = card.startsWith("OK");
+  sdMountButton.disabled = busy || mounted;
+  sdUnmountButton.disabled = busy || !mounted;
+}
+
+// The AP node mounts the card only at boot and from here, so a card can be
+// swapped without rebooting the gate. Unmount closes the log file first.
+function sdMount(mount) {
+  sdMountButton.disabled = true;
+  sdUnmountButton.disabled = true;
+  fetch(mount ? "/sdlog/mount" : "/sdlog/unmount", { method: "POST" })
+    .catch(() => {})
+    .finally(() => {
+      getBatteryVoltage();
+      setTimeout(getBatteryVoltage, 1000);
+    });
+}
 
 function addRssiPoint() {
   if (calib.style.display != "none") {

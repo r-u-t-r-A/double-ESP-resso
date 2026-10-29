@@ -171,10 +171,15 @@ tab and save. The AP node then writes every sample the lap timer sees, about
 
 Under the checkbox, two fields show the card's state:
 
-- **SD card** is checked every 5 s, whether logging is on or not. It shows `OK`
-  with the card type, size and free space in green. It shows an error in red
-  when no card answers (check the wiring and the card), or when a card answers
-  but can't be read. Use FAT32: cards of 64 GB and up usually come as exFAT.
+- **SD card** shows `OK` with the card type, size and free space in green. It
+  shows an error in red when no card answers (check the wiring and the card),
+  or when a card answers but can't be read. Use FAT32: cards of 64 GB and up
+  usually come as exFAT.
+- **Mount SD card / Unmount SD card**: the AP node looks for a card once at
+  boot, and after that only when you press *Mount*. To take the card out
+  without rebooting the gate, press *Unmount* and wait for `unmounted, safe to
+  remove the card`: the log file is closed first. Put a card back in and press
+  *Mount*; with logging on, a new numbered file starts.
 - **SD logging** shows the current file, row count, and any dropped samples or
   write errors.
 

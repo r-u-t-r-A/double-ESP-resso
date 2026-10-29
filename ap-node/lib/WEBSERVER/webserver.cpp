@@ -561,6 +561,16 @@ Battery Voltage:\t%0.1fv";
         request->send(200, "application/json", "{\"status\": \"OK\"}");
     });
 
+    // Config tab buttons. The SD writer task does the work; /status shows it.
+    server.on("/sdlog/mount", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (sdlog) sdlog->requestMount();
+        request->send(200, "application/json", "{\"status\": \"OK\"}");
+    });
+    server.on("/sdlog/unmount", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (sdlog) sdlog->requestUnmount();
+        request->send(200, "application/json", "{\"status\": \"OK\"}");
+    });
+
     // The newest SD log's last ?min= minutes (default 15) as a CSV download.
     server.on("/sdlog/export", HTTP_GET, [this](AsyncWebServerRequest *request) {
         if (!sdlog) {

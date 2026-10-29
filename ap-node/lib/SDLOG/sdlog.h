@@ -7,9 +7,12 @@
  * per logging session (/rssi_NNNN[_YYYYMMDD-HHMM].csv), and saves the file
  * every second, so a card stall never blocks lap timing and a power cut
  * loses at most about a second. Logging runs while the "sdLog" config flag
- * is on. Whether or not it is, the card is mounted at boot, retried every
- * 5 s while missing, and checked every 5 s while idle, so the web UI can show
- * whether a card is present and ready.
+ * is on and a card is mounted. The card is mounted once at boot, and after
+ * that only when the web UI asks (requestMount). requestUnmount closes the
+ * log file and unmounts, so the card can be pulled out safely. A mounted card
+ * is checked every 5 s while idle, so pulling it out without unmounting shows
+ * on the web UI. Nothing retries a missing card: with no card, or no SD
+ * module, the Arduino SD driver busy-waits up to 500 ms per attempt.
  *
  * The export reads the last N minutes of the newest file back as a readable
  * CSV with wall-clock times, for the web UI's download button.
@@ -21,7 +24,7 @@
 
 #define SDLOG_SPI_HZ 20000000
 #define SDLOG_SAVE_MS 1000
-#define SDLOG_MOUNT_RETRY_MS 5000  // also the idle card check interval
+#define SDLOG_CHECK_MS 5000  // a mounted, idle card is checked this often
 #define SDLOG_BATCH 256  // rows formatted per write
 
 class SdLog {
@@ -31,6 +34,15 @@ class SdLog {
     void setEnabled(bool on) { enabled = on; }
     // Browser clock: local time = epochMs + tzOffsetMin, taken now.
     void setClock(int64_t epochMs, int32_t tzOffsetMin);
+    // Web UI buttons. The writer task carries them out; /status shows progress.
+    void requestMount() {
+        unmountRequested = false;
+        mountRequested = true;
+    }
+    void requestUnmount() {
+        mountRequested = false;
+        unmountRequested = true;
+    }
 
     // Lap timer loop, once per 1 kHz sample. Race start/stop and laps are
     // marked on the row where they were first seen.
@@ -41,7 +53,10 @@ class SdLog {
     void statusString(char *buf, size_t len);
 
     // Export of the newest log file's last `minutes`.
+    // Holds the card mounted until the download ends or is dropped.
     struct Cursor {
+        ~Cursor();
+        SdLog *owner = nullptr;  // set while the export holds the card
         File file;
         uint32_t row;     // next row to send
         uint32_t endRow;  // one past the last row
@@ -58,8 +73,10 @@ class SdLog {
    private:
     static void taskEntry(void *arg);
     void run();
+    void tryMount();
     bool mount();
-    void unmount();
+    void beginUnmount(uint8_t state);
+    bool finishUnmount();
     void probeCard();
     bool cardResponds();
     bool openSession();
@@ -76,9 +93,17 @@ class SdLog {
         CARD_ABSENT,       // nothing answered on the SPI bus
         CARD_UNFORMATTED,  // a card answered, but has no FAT filesystem
         CARD_READY,        // mounted
+        CARD_EJECTED,      // unmounted from the web UI: safe to remove
+        CARD_FAILED,       // stopped responding while logging
     } card_state_e;
     volatile uint8_t cardState = CARD_CHECKING;
     volatile uint8_t cardKind = 0;  // sdcard_type_t
+    volatile bool mountRequested = false;
+    volatile bool unmountRequested = false;
+    bool unmounting = false;      // waiting for exports to close
+    uint8_t unmountState = CARD_EJECTED;
+    portMUX_TYPE exportMux = portMUX_INITIALIZER_UNLOCKED;
+    uint8_t exportsOpen = 0;      // downloads reading the card
     sdlog_ring_t ring = {};
 
     // Producer (loop) state for event detection.
@@ -91,7 +116,6 @@ class SdLog {
     volatile bool sessionOpen = false;
     uint32_t sessionRows = 0;
     uint32_t writeErrors = 0;
-    uint32_t lastMountTryMs = 0;
     uint32_t lastCheckMs = 0;
     uint32_t lastSaveMs = 0;
     uint64_t cardBytes = 0;

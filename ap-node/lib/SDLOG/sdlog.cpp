@@ -22,7 +22,7 @@ void SdLog::init(uint8_t sck, uint8_t miso, uint8_t mosi, uint8_t cs) {
     // Priority 0, below the lap timer loop and level with parallelTask. SD
     // writes block on SPI transfers and card stalls, which the ring absorbs.
     // With no card, or no SD module (MISO floats), the Arduino SD driver
-    // busy-waits up to 500 ms per call in sdWait() on every mount retry; at
+    // busy-waits up to 500 ms per call in sdWait() on a mount attempt; at
     // priority 1 that starved parallelTask and froze the gate LEDs. At equal
     // priority FreeRTOS time-slices them every tick. FatFs keeps long file
     // names on the stack.
@@ -78,11 +78,34 @@ bool SdLog::mount() {
     return true;
 }
 
-void SdLog::unmount() {
+void SdLog::tryMount() {
+    mounted = mount();
+    if (!mounted) {
+        probeCard();
+        DEBUG("SD: %s\n", cardState == CARD_UNFORMATTED ? "card has no FAT filesystem" : "no card");
+    }
+    lastCheckMs = millis();
+}
+
+// Starts an unmount that ends in `state`. Logging stops at once; the card is
+// released by finishUnmount() once no export is reading it.
+void SdLog::beginUnmount(uint8_t state) {
+    unmounting = true;
+    unmountState = state;
+}
+
+bool SdLog::finishUnmount() {
     closeSession();
+    portENTER_CRITICAL(&exportMux);
+    bool idle = exportsOpen == 0;
+    if (idle) mounted = false;  // no new exports from here on
+    portEXIT_CRITICAL(&exportMux);
+    if (!idle) return false;
     SD.end();
-    mounted = false;
-    cardState = CARD_CHECKING;
+    unmounting = false;
+    cardState = unmountState;
+    DEBUG("SD: unmounted%s\n", unmountState == CARD_EJECTED ? ", safe to remove" : "");
+    return true;
 }
 
 // SD.begin() fails the same way with no card and with an unformatted one.
@@ -168,18 +191,25 @@ void SdLog::closeSession() {
 }
 
 void SdLog::run() {
+    tryMount();  // once at boot; after that only from the web UI
     for (;;) {
         uint32_t now = millis();
+        // Each request is cleared only once its result shows in cardState, so
+        // /status never flashes the old state in between.
+        if (unmountRequested) {
+            if (mounted && !unmounting) beginUnmount(CARD_EJECTED);
+            unmountRequested = false;
+        }
+        if (mountRequested) {
+            if (!mounted) cardState = CARD_CHECKING;  // "checking..." while SD.begin() runs
+            mountRequested = false;
+            if (!mounted) tryMount();
+        }
+        if (unmounting && !finishUnmount()) {
+            vTaskDelay(pdMS_TO_TICKS(100));  // an export is still reading the card
+            continue;
+        }
         if (!mounted) {
-            if (lastMountTryMs == 0 || (now - lastMountTryMs) >= SDLOG_MOUNT_RETRY_MS) {
-                lastMountTryMs = now;
-                mounted = mount();
-                if (!mounted) {
-                    probeCard();
-                    DEBUG("SD: %s\n", cardState == CARD_UNFORMATTED ? "card has no FAT filesystem" : "no card");
-                }
-                lastCheckMs = now;
-            }
             sdlog_flush(&ring);
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
@@ -187,13 +217,12 @@ void SdLog::run() {
         if (!enabled) {
             if (sessionOpen) closeSession();
             sdlog_flush(&ring);
-            // Idle: notice a card being pulled out.
-            if ((now - lastCheckMs) >= SDLOG_MOUNT_RETRY_MS) {
+            // Idle: notice a card pulled out without unmounting.
+            if ((now - lastCheckMs) >= SDLOG_CHECK_MS) {
                 lastCheckMs = now;
                 if (!cardResponds()) {
                     DEBUG("SD: card gone\n");
-                    unmount();
-                    lastMountTryMs = now;
+                    beginUnmount(CARD_ABSENT);
                 }
             }
             vTaskDelay(pdMS_TO_TICKS(100));
@@ -201,7 +230,7 @@ void SdLog::run() {
         }
         if (!sessionOpen && !openSession()) {
             ++writeErrors;
-            unmount();
+            beginUnmount(CARD_FAILED);
             continue;
         }
 
@@ -210,9 +239,9 @@ void SdLog::run() {
             for (unsigned i = 0; i < n; ++i) sdlog_format_row(rows + i * SDLOG_ROW_LEN, &batch[i]);
             size_t bytes = (size_t)n * SDLOG_ROW_LEN;
             if (file.write((const uint8_t *)rows, bytes) != bytes) {
-                DEBUG("SD: write failed, remounting\n");
+                DEBUG("SD: write failed, unmounting\n");
                 ++writeErrors;
-                unmount();
+                beginUnmount(CARD_FAILED);
                 continue;
             }
             sessionRows += n;
@@ -239,6 +268,14 @@ static const char *cardKindName(uint8_t kind) {
 }
 
 void SdLog::cardString(char *buf, size_t len) {
+    if (unmountRequested || unmounting) {
+        snprintf(buf, len, "unmounting...");
+        return;
+    }
+    if (mountRequested) {
+        snprintf(buf, len, "mounting...");
+        return;
+    }
     switch (cardState) {
         case CARD_READY: {
             // usedBytes is read at mount and after each session; count this session's rows on top.
@@ -252,7 +289,13 @@ void SdLog::cardString(char *buf, size_t len) {
             snprintf(buf, len, "ERROR: card found (%s) but not readable: format it as FAT32", cardKindName(cardKind));
             break;
         case CARD_ABSENT:
-            snprintf(buf, len, "ERROR: no card detected (check wiring and that a card is inserted)");
+            snprintf(buf, len, "ERROR: no card detected (insert a card, then press Mount)");
+            break;
+        case CARD_EJECTED:
+            snprintf(buf, len, "unmounted, safe to remove the card");
+            break;
+        case CARD_FAILED:
+            snprintf(buf, len, "ERROR: card stopped responding (reinsert it, then press Mount)");
             break;
         default:
             snprintf(buf, len, "checking...");
@@ -263,8 +306,8 @@ void SdLog::cardString(char *buf, size_t len) {
 void SdLog::statusString(char *buf, size_t len) {
     if (!enabled) {
         snprintf(buf, len, "off");
-    } else if (!mounted) {
-        snprintf(buf, len, "waiting for a card, errors %lu", (unsigned long)writeErrors);
+    } else if (!mounted || unmounting) {
+        snprintf(buf, len, "paused, no card mounted, errors %lu", (unsigned long)writeErrors);
     } else {
         uint32_t freeMb = (uint32_t)((cardBytes - usedBytes) / 1048576ULL);
         snprintf(buf, len, "logging %s, %lu rows, %lu MB free, dropped %lu, errors %lu", sessionOpen ? path : "-",
@@ -274,26 +317,34 @@ void SdLog::statusString(char *buf, size_t len) {
 }
 
 bool SdLog::openExport(uint32_t minutes, Cursor &c, const char **why) {
-    if (!mounted) {
-        *why = "no SD card";
+    // Hold the card mounted until closeExport(): unmounting waits for it.
+    portENTER_CRITICAL(&exportMux);
+    bool ok = mounted && !unmounting && !unmountRequested;
+    if (ok) ++exportsOpen;
+    portEXIT_CRITICAL(&exportMux);
+    if (!ok) {
+        *why = "no SD card mounted";
         return false;
     }
+    c.owner = this;
     char p[40];
     bool current = sessionOpen;
     if (current) {
         strlcpy(p, path, sizeof(p));
     } else if (!newestFile(p, sizeof(p))) {
+        closeExport(c);
         *why = "no log files on the SD card";
         return false;
     }
     c.file = SD.open(p, FILE_READ);
     if (!c.file) {
+        closeExport(c);
         *why = "cannot open the log file";
         return false;
     }
     uint32_t rowCount = c.file.size() > SDLOG_ROW_LEN ? (uint32_t)((c.file.size() - SDLOG_ROW_LEN) / SDLOG_ROW_LEN) : 0;
     if (rowCount == 0) {
-        c.file.close();
+        closeExport(c);
         *why = "the log file is empty";
         return false;
     }
@@ -310,7 +361,7 @@ bool SdLog::openExport(uint32_t minutes, Cursor &c, const char **why) {
     };
     uint32_t lastMs;
     if (!rowMs(rowCount - 1, &lastMs)) {
-        c.file.close();
+        closeExport(c);
         *why = "the log file is damaged";
         return false;
     }
@@ -358,4 +409,14 @@ size_t SdLog::readExport(Cursor &c, uint8_t *buf, size_t maxLen) {
 
 void SdLog::closeExport(Cursor &c) {
     if (c.file) c.file.close();
+    if (!c.owner) return;
+    c.owner = nullptr;
+    portENTER_CRITICAL(&exportMux);
+    if (exportsOpen) --exportsOpen;
+    portEXIT_CRITICAL(&exportMux);
+}
+
+// A download dropped mid-way never reaches closeExport() from the response.
+SdLog::Cursor::~Cursor() {
+    if (owner) owner->closeExport(*this);
 }

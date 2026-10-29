@@ -115,6 +115,11 @@
             <span class="val" id="sdcard">checking...</span>
           </div>
 
+          <div class="sdlog-only" style="display: none">
+            <button id="sdMountButton" onclick="sdMount(true)" disabled>Mount SD card</button>
+            <button id="sdUnmountButton" onclick="sdMount(false)" disabled>Unmount SD card</button>
+          </div>
+
           <div class="config-item sdlog-only" style="display: none">
             <label for="sdstatus">SD logging:</label>
             <span class="val" id="sdstatus">-</span>
