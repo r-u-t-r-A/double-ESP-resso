@@ -120,11 +120,13 @@ A cheap single-pilot FPV lap timer built from two stacked Seeed XIAO ESP32-C5 bo
     440 Hz / 880 Hz triangle). Voice is separate.
   - Gate colours follow RH's default LED effects for events (staging orange 2-on-1-off, start
     green 4 s, stop red 4 s, gate entry seat-1 blue sparkle, startup rainbow), with the latest
-    event replacing the previous one. Our idle (bouncing balls + RSSI meter) and running green
+    event replacing the previous one. Our idle (colour twinkles + RSSI meter) and running green
     stay, by the user's choice. The lap chase flash was dropped (RH: none).
-  - Idle bouncing balls: like WLED's effect but written from scratch (WLED is EUPL, don't port it).
-    4 balls fall onto LED 0 under gravity (strip length = 1), lose 10-25 % of their speed per
-    bounce, and relaunch below 10 % of launch speed.
+  - Idle colour twinkles: like WLED's *Colortwinkles* but written from scratch (WLED is EUPL, don't
+    port it). The ring is dark. New twinkles start at a steady 5 % of the LEDs per second, each
+    on a dark LED in a random colour (yellow, red, pink, purple). Each rises 8/frame (0.6 s) and
+    falls by level/32+1 per frame (about 1.7 s). On average that lights about 4 full-LED
+    equivalents on 94 LEDs, against about 11 for fairy lights. Chosen for low idle power.
   - `RaceControl::stop()` calls `LedStrip::stop()`, which also ends staging. Without it the
     strip's own staging flag outlived a cancelled countdown.
 

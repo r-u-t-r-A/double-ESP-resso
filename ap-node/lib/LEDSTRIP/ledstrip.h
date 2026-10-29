@@ -19,7 +19,7 @@
  *   gate entry while racing    -> seat-1 blue sparkle over green (RH "Gate Entrance")
  *   staging                    -> orange, two on / one off (RH "Race Staging")
  *   running                    -> green
- *   idle                       -> bouncing balls plus an RSSI level meter
+ *   idle                       -> colour twinkles plus an RSSI level meter
  *   low battery                -> short amber blip every 2 s over any state
  */
 #include <Adafruit_NeoPixel.h>
@@ -37,11 +37,13 @@
 #define LEDSTRIP_SPARKLE_STEP_MS 100   // RH sparkle defaults: 100 steps of 100 ms,
 #define LEDSTRIP_SPARKLE_STEPS 100     // ~1 new pixel per step, 5 % decay per step
 #define LEDSTRIP_SPARKLE_DECAY_PCT 95
-// Idle "bouncing balls" (like WLED's effect, written from scratch): balls fall
-// from the top of the strip onto LED 0 and lose speed at every bounce.
-#define LEDSTRIP_BALLS 4
-#define LEDSTRIP_BALL_GRAVITY 0.31f    // strip lengths per s^2
-#define LEDSTRIP_BALL_RELAUNCH 0.1f    // relaunch below this fraction of the launch speed
+// Idle "colour twinkles" (like WLED's Colortwinkles, written from scratch): on
+// a dark ring, random LEDs fade up to a random yellow, red, pink or purple and
+// back down to off. Only a few are lit at once, so it draws little power.
+#define LEDSTRIP_TWINKLE_COLORS 4
+#define LEDSTRIP_TWINKLE_SPAWN_PCT_PER_S 5  // new twinkles per second, as % of the LEDs
+#define LEDSTRIP_TWINKLE_RISE_STEP 8        // level added per frame: about 0.6 s up
+#define LEDSTRIP_TWINKLE_FALL_SHIFT 5       // per frame, fall by level/32 (+1): about 1.5 s down
 
 typedef struct {
     bool running;           // LapTimer RUNNING
@@ -98,13 +100,10 @@ class LedStrip {
     uint32_t effectMs = 0;
     uint32_t lastFrameMs = 0;
     uint8_t sparkle[LEDSTRIP_MAX_LEDS];  // per-pixel sparkle level
-    struct {
-        float speed;        // upward speed at the last bounce, strip lengths/s
-        float damping;      // speed kept per bounce
-        uint32_t bounceMs;  // time of the last bounce
-    } balls[LEDSTRIP_BALLS];
-    bool ballsReady = false;
-    uint32_t ballsFrameMs = 0;
+    uint8_t twinkle[LEDSTRIP_MAX_LEDS];      // idle twinkles: each LED's level
+    uint8_t twinkleState[LEDSTRIP_MAX_LEDS]; // colour index, TWINKLE_RISING while fading up
+    uint32_t twinkleSpawnAcc = 0;
+    uint32_t twinkleFrameMs = 0;
     uint16_t sparkleSteps = 0;
     uint32_t sparkleStepMs = 0;
 
@@ -114,7 +113,8 @@ class LedStrip {
     bool effectActive(uint32_t now);
     void stepSparkle(uint32_t now);
     void renderIdle(uint32_t now, const ledstrip_inputs_t &in);
-    void renderBouncingBalls(uint32_t now);
+    void renderTwinkles(uint32_t now);
+    static uint32_t scaleColor(uint32_t color, uint8_t level);
     void renderStaging();
     void renderRainbow(uint32_t now);
     void renderSparkle();
