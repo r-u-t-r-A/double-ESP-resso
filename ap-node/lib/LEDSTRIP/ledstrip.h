@@ -30,6 +30,7 @@
 
 #define LEDSTRIP_MAX_LEDS 300
 #define LEDSTRIP_FRAME_MS 20
+#define LEDSTRIP_STALL_MS 200  // log frame gaps longer than this (parallelTask starved)
 #define LEDSTRIP_ARM_TIMEOUT_MS 15000
 #define LEDSTRIP_STARTUP_MS 5000
 #define LEDSTRIP_EVENT_MS 4000         // RH "Solid" effect hold (start, stop)
@@ -103,7 +104,7 @@ class LedStrip {
     uint8_t twinkle[LEDSTRIP_MAX_LEDS];      // idle twinkles: each LED's level
     uint8_t twinkleState[LEDSTRIP_MAX_LEDS]; // colour index, TWINKLE_RISING while fading up
     uint32_t twinkleSpawnAcc = 0;
-    uint32_t twinkleFrameMs = 0;
+    bool idleShown = false;  // the last frame drawn was idle (twinkles carry on)
     uint16_t sparkleSteps = 0;
     uint32_t sparkleStepMs = 0;
 
@@ -112,8 +113,8 @@ class LedStrip {
     void startEffect(effect_e fx, uint32_t now);
     bool effectActive(uint32_t now);
     void stepSparkle(uint32_t now);
-    void renderIdle(uint32_t now, const ledstrip_inputs_t &in);
-    void renderTwinkles(uint32_t now);
+    void renderIdle(bool resume, const ledstrip_inputs_t &in);
+    void renderTwinkles(bool resume);
     static uint32_t scaleColor(uint32_t color, uint8_t level);
     void renderStaging();
     void renderRainbow(uint32_t now);

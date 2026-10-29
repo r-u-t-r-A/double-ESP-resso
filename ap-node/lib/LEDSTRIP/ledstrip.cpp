@@ -106,14 +106,15 @@ uint32_t LedStrip::scaleColor(uint32_t color, uint8_t level) {
                                     (uint8_t)((color & 0xFF) * level / 255));
 }
 
-void LedStrip::renderTwinkles(uint32_t now) {
+void LedStrip::renderTwinkles(bool resume) {
     if (count == 0) return;
-    // Coming back from a race or another effect: start from a dark ring.
-    if (now - twinkleFrameMs > 500) {
+    // Coming back from a race, another effect or a dark strip: start from a
+    // dark ring. A frame that is only late (parallelTask was starved) carries
+    // on where it was instead of blanking every twinkle.
+    if (!resume) {
         memset(twinkle, 0, sizeof(twinkle));
         twinkleSpawnAcc = 0;
     }
-    twinkleFrameMs = now;
 
     // Fade every lit LED one frame along: up linearly, down slowing as it dims.
     for (uint16_t i = 0; i < count; ++i) {
@@ -151,8 +152,8 @@ void LedStrip::renderTwinkles(uint32_t now) {
     }
 }
 
-void LedStrip::renderIdle(uint32_t now, const ledstrip_inputs_t &in) {
-    renderTwinkles(now);
+void LedStrip::renderIdle(bool resume, const ledstrip_inputs_t &in) {
+    renderTwinkles(resume);
 
     // RSSI level meter: lights a growing arc from exitRssi towards
     // enterRssi, which makes threshold calibration visible at the gate.
@@ -244,7 +245,9 @@ bool LedStrip::effectActive(uint32_t now) {
 }
 
 void LedStrip::handleLedStrip(uint32_t now, const ledstrip_inputs_t &in) {
-    if (!ready || (now - lastFrameMs) < LEDSTRIP_FRAME_MS) return;
+    uint32_t gap = now - lastFrameMs;
+    if (!ready || gap < LEDSTRIP_FRAME_MS) return;
+    if (lastFrameMs && gap > LEDSTRIP_STALL_MS) DEBUG("LED strip: no frame for %lu ms\n", (unsigned long)gap);
     lastFrameMs = now;
 
     // Track race events even while dark, so re-enabling shows the right
@@ -278,6 +281,8 @@ void LedStrip::handleLedStrip(uint32_t now, const ledstrip_inputs_t &in) {
     if (effect == FX_SPARKLE) stepSparkle(now);
     if (effect != FX_NONE && !effectActive(now)) effect = FX_NONE;
 
+    bool idleBefore = idleShown;
+    idleShown = false;
     if (!enabled || count == 0) {
         if (!wasDark) {
             strip.clear();
@@ -307,7 +312,8 @@ void LedStrip::handleLedStrip(uint32_t now, const ledstrip_inputs_t &in) {
     } else if (in.running) {
         fill(COLOR_RUNNING);
     } else {
-        renderIdle(now, in);
+        renderIdle(idleBefore, in);
+        idleShown = true;
     }
 
     if (in.batteryLow && (now % 2000) < 200) {
